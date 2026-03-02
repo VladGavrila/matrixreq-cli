@@ -6,6 +6,16 @@ A command-line interface for the [MatrixREQ](https://docs.matrixreq.com/en/) RES
 
 Download a pre-built binary from the [Releases](https://github.com/VladGavrila/matrixreq-cli/releases) page
 
+### macOS: removing the quarantine flag
+
+macOS Gatekeeper will block unsigned binaries downloaded from the internet. After downloading, remove the quarantine attribute:
+
+```bash
+xattr -c path/to/mxreq
+```
+
+You only need to do this once after downloading.
+
 ### Build from source
 
 ```bash
