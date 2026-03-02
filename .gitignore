@@ -1,0 +1,26 @@
+# Binary
+mxreq
+
+# Go
+*.test
+*.out
+vendor/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Config (don't commit user configs)
+config.yaml
+
+# API spec (not shipped)
+API_spec.json
+
+dist/
