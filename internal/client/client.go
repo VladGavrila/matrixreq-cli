@@ -55,6 +55,15 @@ func (c *Client) newRequest(method, path string, body io.Reader) (*http.Request,
 	return req, nil
 }
 
+func (c *Client) debugJSON(v any) []byte {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(v)
+	return bytes.TrimRight(buf.Bytes(), "\n")
+}
+
 func (c *Client) debugRequest(req *http.Request, body []byte) {
 	if !c.debug {
 		return
@@ -72,8 +81,7 @@ func (c *Client) debugRequest(req *http.Request, body []byte) {
 			entry["body"] = string(body)
 		}
 	}
-	out, _ := json.MarshalIndent(entry, "", "  ")
-	fmt.Fprintln(os.Stderr, string(out))
+	fmt.Fprintln(os.Stderr, string(c.debugJSON(entry)))
 }
 
 func (c *Client) debugResponse(status int, body []byte) {
@@ -92,8 +100,7 @@ func (c *Client) debugResponse(status int, body []byte) {
 			entry["body"] = string(body)
 		}
 	}
-	out, _ := json.MarshalIndent(entry, "", "  ")
-	fmt.Fprintln(os.Stderr, string(out))
+	fmt.Fprintln(os.Stderr, string(c.debugJSON(entry)))
 }
 
 // Do executes an HTTP request and returns the response body.
@@ -136,11 +143,13 @@ func (c *Client) Post(path string, body any) ([]byte, error) {
 	var r io.Reader
 	var bodyBytes []byte
 	if body != nil {
-		var err error
-		bodyBytes, err = json.Marshal(body)
-		if err != nil {
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(body); err != nil {
 			return nil, fmt.Errorf("marshaling request body: %w", err)
 		}
+		bodyBytes = bytes.TrimRight(buf.Bytes(), "\n")
 		r = bytes.NewReader(bodyBytes)
 	}
 	req, err := c.newRequest(http.MethodPost, path, r)
@@ -156,11 +165,13 @@ func (c *Client) Put(path string, body any) ([]byte, error) {
 	var r io.Reader
 	var bodyBytes []byte
 	if body != nil {
-		var err error
-		bodyBytes, err = json.Marshal(body)
-		if err != nil {
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(body); err != nil {
 			return nil, fmt.Errorf("marshaling request body: %w", err)
 		}
+		bodyBytes = bytes.TrimRight(buf.Bytes(), "\n")
 		r = bytes.NewReader(bodyBytes)
 	}
 	req, err := c.newRequest(http.MethodPut, path, r)
