@@ -3,7 +3,9 @@ package cli
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
+	"github.com/VladGavrila/matrixreq-cli/internal/api"
 	"github.com/VladGavrila/matrixreq-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -40,6 +42,17 @@ var categoryListCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
+		if filter, _ := cmd.Flags().GetString("filter"); filter != "" {
+			filter = strings.ToLower(filter)
+			var filtered []api.CategoryExtendedType
+			for _, c := range cats {
+				if strings.Contains(strings.ToLower(c.Category.ShortLabel), filter) ||
+					strings.Contains(strings.ToLower(c.Category.Label), filter) {
+					filtered = append(filtered, c)
+				}
+			}
+			cats = filtered
+		}
 		if getOutputFormat() == "json" {
 			return output.PrintItem(getOutputFormat(), cats)
 		}
@@ -70,20 +83,34 @@ var categoryGetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		cat, err := svc.Categories.Get(project, args[0])
+		cat, err := svc.Categories.Get(project, upperRef(args[0]))
 		if err != nil {
 			return err
 		}
 		if getOutputFormat() == "json" {
 			return output.PrintItem(getOutputFormat(), cat)
 		}
-		fmt.Printf("Category: %s (%s)\n", cat.Category.Label, cat.Category.ShortLabel)
-		fmt.Printf("Fields:   %d\n", len(cat.FieldList.Field))
-		for _, f := range cat.FieldList.Field {
-			fmt.Printf("  [%d] %s (%s) order=%d\n", f.ID, f.Label, f.FieldType, f.Order)
+		fmt.Printf("Category: %s (%s)\n\n", cat.Category.Label, cat.Category.ShortLabel)
+		fields := cat.FieldList
+		if filter, _ := cmd.Flags().GetString("filter"); filter != "" {
+			filter = strings.ToLower(filter)
+			var filtered []api.FieldType
+			for _, f := range fields {
+				if strings.Contains(strings.ToLower(f.Label), filter) ||
+					strings.Contains(strings.ToLower(f.FieldType), filter) {
+					filtered = append(filtered, f)
+				}
+			}
+			fields = filtered
 		}
-		fmt.Printf("Folders:  %d\n", len(cat.FolderList))
-		return nil
+		headers := []string{"ID", "Label", "Type", "Order"}
+		var rows [][]string
+		for _, f := range fields {
+			rows = append(rows, []string{
+				strconv.Itoa(f.ID), f.Label, f.FieldType, strconv.Itoa(f.Order),
+			})
+		}
+		return output.Print(getOutputFormat(), headers, rows)
 	},
 }
 
@@ -110,6 +137,8 @@ var categoryCreateCmd = &cobra.Command{
 }
 
 func init() {
+	categoryListCmd.Flags().String("filter", "", "Filter categories by short label or label")
+	categoryGetCmd.Flags().String("filter", "", "Filter fields by label or type")
 	categoryCreateCmd.Flags().StringP("reason", "r", "", "Reason for creation")
 	_ = categoryCreateCmd.MarkFlagRequired("reason")
 }
@@ -131,7 +160,7 @@ var categoryUpdateCmd = &cobra.Command{
 		shortLabel, _ := cmd.Flags().GetString("short")
 		reason, _ := cmd.Flags().GetString("reason")
 		order, _ := cmd.Flags().GetInt("order")
-		if err := svc.Categories.Update(project, args[0], label, shortLabel, reason, order); err != nil {
+		if err := svc.Categories.Update(project, upperRef(args[0]), label, shortLabel, reason, order); err != nil {
 			return err
 		}
 		fmt.Printf("Category %q updated.\n", args[0])
@@ -161,7 +190,7 @@ var categoryDeleteCmd = &cobra.Command{
 			return err
 		}
 		reason, _ := cmd.Flags().GetString("reason")
-		if err := svc.Categories.Delete(project, args[0], reason); err != nil {
+		if err := svc.Categories.Delete(project, upperRef(args[0]), reason); err != nil {
 			return err
 		}
 		fmt.Printf("Category %q deleted.\n", args[0])
@@ -187,7 +216,7 @@ var categorySettingsCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		settings, err := svc.Categories.GetSettings(project, args[0])
+		settings, err := svc.Categories.GetSettings(project, upperRef(args[0]))
 		if err != nil {
 			return err
 		}

@@ -125,10 +125,10 @@ var todoCreateCmd = &cobra.Command{
 		todoType, _ := cmd.Flags().GetString("type")
 		fieldID, _ := cmd.Flags().GetInt("field-id")
 		logins, _ := cmd.Flags().GetString("logins")
-		if err := svc.Todos.Create(project, args[0], text, todoType, fieldID, logins); err != nil {
+		if err := svc.Todos.Create(project, upperRef(args[0]), text, todoType, fieldID, logins); err != nil {
 			return err
 		}
-		fmt.Printf("Todo created on %s.\n", args[0])
+		fmt.Printf("Todo created on %s.\n", upperRef(args[0]))
 		return nil
 	},
 }

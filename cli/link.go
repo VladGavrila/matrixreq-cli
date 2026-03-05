@@ -31,10 +31,10 @@ var linkCreateCmd = &cobra.Command{
 			return err
 		}
 		reason, _ := cmd.Flags().GetString("reason")
-		if err := svc.Items.CreateLink(project, args[0], args[1], reason); err != nil {
+		if err := svc.Items.CreateLink(project, upperRef(args[0]), upperRef(args[1]), reason); err != nil {
 			return err
 		}
-		fmt.Printf("Link created: %s -> %s\n", args[0], args[1])
+		fmt.Printf("Link created: %s -> %s\n", upperRef(args[0]), upperRef(args[1]))
 		return nil
 	},
 }
@@ -53,10 +53,10 @@ var linkDeleteCmd = &cobra.Command{
 			return err
 		}
 		reason, _ := cmd.Flags().GetString("reason")
-		if err := svc.Items.DeleteLink(project, args[0], args[1], reason); err != nil {
+		if err := svc.Items.DeleteLink(project, upperRef(args[0]), upperRef(args[1]), reason); err != nil {
 			return err
 		}
-		fmt.Printf("Link deleted: %s -> %s\n", args[0], args[1])
+		fmt.Printf("Link deleted: %s -> %s\n", upperRef(args[0]), upperRef(args[1]))
 		return nil
 	},
 }

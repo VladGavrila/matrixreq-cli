@@ -34,7 +34,7 @@ var reportGenerateCmd = &cobra.Command{
 		}
 		format, _ := cmd.Flags().GetString("format")
 		signed, _ := cmd.Flags().GetBool("signed")
-		ack, err := svc.Reports.Generate(project, args[0], format, signed)
+		ack, err := svc.Reports.Generate(project, upperRef(args[0]), format, signed)
 		if err != nil {
 			return err
 		}
@@ -66,7 +66,7 @@ var reportSignedCmd = &cobra.Command{
 			return err
 		}
 		format, _ := cmd.Flags().GetString("format")
-		data, err := svc.Reports.GenerateSigned(project, args[0], format)
+		data, err := svc.Reports.GenerateSigned(project, upperRef(args[0]), format)
 		if err != nil {
 			return err
 		}

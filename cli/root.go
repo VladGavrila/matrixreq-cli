@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/VladGavrila/matrixreq-cli/internal/client"
 	"github.com/VladGavrila/matrixreq-cli/internal/config"
@@ -13,7 +14,7 @@ import (
 )
 
 // Version is set at build time via ldflags.
-var Version = "1.0.1"
+var Version = "1.1.0"
 
 var (
 	flagURL     string
@@ -80,6 +81,11 @@ func requireProject() (string, error) {
 		return cfg.DefaultProject, nil
 	}
 	return "", fmt.Errorf("project is required (use --project or set default_project in config)")
+}
+
+// upperRef uppercases an item ref, folder ref, or category label for the API.
+func upperRef(s string) string {
+	return strings.ToUpper(s)
 }
 
 // newService creates a MatrixService from config/flags.

@@ -27,7 +27,7 @@ type UserService interface {
 
 // GetUserListAck wraps the user list response.
 type GetUserListAck struct {
-	UserList []api.UserType `json:"userList,omitempty"`
+	UserList []api.UserType `json:"user,omitempty"`
 }
 
 type userService struct {

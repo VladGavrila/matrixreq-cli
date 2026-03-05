@@ -32,7 +32,7 @@ var folderGetCmd = &cobra.Command{
 			return err
 		}
 		history, _ := cmd.Flags().GetBool("history")
-		folder, err := svc.Items.GetFolder(project, args[0], history)
+		folder, err := svc.Items.GetFolder(project, upperRef(args[0]), history)
 		if err != nil {
 			return err
 		}
@@ -75,7 +75,7 @@ var folderCreateCmd = &cobra.Command{
 		label, _ := cmd.Flags().GetString("label")
 		reason, _ := cmd.Flags().GetString("reason")
 
-		ack, err := svc.Items.CreateFolder(project, parent, label, reason)
+		ack, err := svc.Items.CreateFolder(project, upperRef(parent), label, reason)
 		if err != nil {
 			return err
 		}

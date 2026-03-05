@@ -32,7 +32,7 @@ var fieldGetCmd = &cobra.Command{
 		if err != nil {
 			return err
 		}
-		value, err := svc.Fields.Get(project, args[0], args[1])
+		value, err := svc.Fields.Get(project, upperRef(args[0]), args[1])
 		if err != nil {
 			return err
 		}
@@ -91,10 +91,10 @@ var fieldDeleteCmd = &cobra.Command{
 		}
 		fieldID, _ := cmd.Flags().GetInt("field-id")
 		reason, _ := cmd.Flags().GetString("reason")
-		if err := svc.Fields.Delete(project, args[0], fieldID, reason); err != nil {
+		if err := svc.Fields.Delete(project, upperRef(args[0]), fieldID, reason); err != nil {
 			return err
 		}
-		fmt.Printf("Field %d deleted from %s.\n", fieldID, args[0])
+		fmt.Printf("Field %d deleted from %s.\n", fieldID, upperRef(args[0]))
 		return nil
 	},
 }
@@ -123,10 +123,10 @@ var fieldAddCmd = &cobra.Command{
 		fieldType, _ := cmd.Flags().GetString("type")
 		param, _ := cmd.Flags().GetString("param")
 		reason, _ := cmd.Flags().GetString("reason")
-		if err := svc.Fields.AddToCategory(project, args[0], label, fieldType, param, reason); err != nil {
+		if err := svc.Fields.AddToCategory(project, upperRef(args[0]), label, fieldType, param, reason); err != nil {
 			return err
 		}
-		fmt.Printf("Field %q added to %s.\n", label, args[0])
+		fmt.Printf("Field %q added to %s.\n", label, upperRef(args[0]))
 		return nil
 	},
 }

@@ -37,7 +37,7 @@ var signCreateCmd = &cobra.Command{
 		acceptComments, _ := cmd.Flags().GetString("accept-comments")
 
 		path := fmt.Sprintf("/%s/sign/%s?password=%s",
-			url.PathEscape(project), url.PathEscape(args[0]), url.QueryEscape(password))
+			url.PathEscape(project), url.PathEscape(upperRef(args[0])), url.QueryEscape(password))
 		if acceptComments != "" {
 			path += "&acceptComments=" + url.QueryEscape(acceptComments)
 		}

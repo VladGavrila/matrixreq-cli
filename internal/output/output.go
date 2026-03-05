@@ -35,6 +35,10 @@ func New(format string) Formatter {
 
 // Print formats and prints data using the given format string.
 func Print(format string, headers []string, rows [][]string) error {
+	if len(rows) == 0 {
+		fmt.Println("No results found.")
+		return nil
+	}
 	f := New(format)
 	out, err := f.FormatList(headers, rows)
 	if err != nil {

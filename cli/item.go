@@ -39,7 +39,7 @@ var itemGetCmd = &cobra.Command{
 			return err
 		}
 		history, _ := cmd.Flags().GetBool("history")
-		item, err := svc.Items.Get(project, args[0], history)
+		item, err := svc.Items.Get(project, upperRef(args[0]), history)
 		if err != nil {
 			return err
 		}
@@ -98,7 +98,7 @@ var itemCreateCmd = &cobra.Command{
 
 		req := &api.CreateItemRequest{
 			Title:  title,
-			Folder: folder,
+			Folder: upperRef(folder),
 			Reason: reason,
 		}
 		ack, err := svc.Items.Create(project, req)
@@ -142,7 +142,7 @@ var itemUpdateCmd = &cobra.Command{
 			Title:  title,
 			Reason: reason,
 		}
-		item, err := svc.Items.Update(project, args[0], req)
+		item, err := svc.Items.Update(project, upperRef(args[0]), req)
 		if err != nil {
 			return err
 		}
@@ -174,10 +174,10 @@ var itemDeleteCmd = &cobra.Command{
 			return err
 		}
 		reason, _ := cmd.Flags().GetString("reason")
-		if err := svc.Items.Delete(project, args[0], reason); err != nil {
+		if err := svc.Items.Delete(project, upperRef(args[0]), reason); err != nil {
 			return err
 		}
-		fmt.Printf("Deleted %s.\n", args[0])
+		fmt.Printf("Deleted %s.\n", upperRef(args[0]))
 		return nil
 	},
 }
@@ -201,14 +201,14 @@ var itemRestoreCmd = &cobra.Command{
 			return err
 		}
 		reason, _ := cmd.Flags().GetString("reason")
-		ack, err := svc.Items.Restore(project, args[0], reason)
+		ack, err := svc.Items.Restore(project, upperRef(args[0]), reason)
 		if err != nil {
 			return err
 		}
 		if getOutputFormat() == "json" {
 			return output.PrintItem(getOutputFormat(), ack)
 		}
-		fmt.Printf("Restored %s to parent=%s, order=%d\n", args[0], ack.NewParent, ack.NewOrder)
+		fmt.Printf("Restored %s to parent=%s, order=%d\n", upperRef(args[0]), ack.NewParent, ack.NewOrder)
 		return nil
 	},
 }
@@ -233,7 +233,7 @@ var itemCopyCmd = &cobra.Command{
 		}
 		reason, _ := cmd.Flags().GetString("reason")
 		copyLabels, _ := cmd.Flags().GetInt("copy-labels")
-		ack, err := svc.Items.Copy(project, args[0], args[1], reason, copyLabels)
+		ack, err := svc.Items.Copy(project, upperRef(args[0]), upperRef(args[1]), reason, copyLabels)
 		if err != nil {
 			return err
 		}
@@ -265,10 +265,10 @@ var itemMoveCmd = &cobra.Command{
 			return err
 		}
 		reason, _ := cmd.Flags().GetString("reason")
-		if err := svc.Items.Move(project, args[0], args[1], reason); err != nil {
+		if err := svc.Items.Move(project, upperRef(args[0]), upperRef(args[1]), reason); err != nil {
 			return err
 		}
-		fmt.Printf("Moved items to %s.\n", args[0])
+		fmt.Printf("Moved items to %s.\n", upperRef(args[0]))
 		return nil
 	},
 }
@@ -292,10 +292,10 @@ var itemTouchCmd = &cobra.Command{
 			return err
 		}
 		reason, _ := cmd.Flags().GetString("reason")
-		if err := svc.Items.Touch(project, args[0], reason); err != nil {
+		if err := svc.Items.Touch(project, upperRef(args[0]), reason); err != nil {
 			return err
 		}
-		fmt.Printf("Touched %s.\n", args[0])
+		fmt.Printf("Touched %s.\n", upperRef(args[0]))
 		return nil
 	},
 }

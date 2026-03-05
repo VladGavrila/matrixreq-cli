@@ -29,7 +29,7 @@ var exportCmd = &cobra.Command{
 			return err
 		}
 		path := fmt.Sprintf("/%s/export?itemList=%s",
-			url.PathEscape(project), url.QueryEscape(args[0]))
+			url.PathEscape(project), url.QueryEscape(upperRef(args[0])))
 		data, err := svc.Client.Get(path)
 		if err != nil {
 			return err

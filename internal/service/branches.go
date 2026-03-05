@@ -59,9 +59,11 @@ func (s *branchService) History(project string) ([]api.MergeHistory, error) {
 	if err != nil {
 		return nil, err
 	}
-	var resp []api.MergeHistory
+	var resp struct {
+		Entries []api.MergeHistory `json:"entries"`
+	}
 	if err := json.Unmarshal(data, &resp); err != nil {
 		return nil, fmt.Errorf("parsing merge history: %w", err)
 	}
-	return resp, nil
+	return resp.Entries, nil
 }

@@ -3,7 +3,9 @@ package cli
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
+	"github.com/VladGavrila/matrixreq-cli/internal/api"
 	"github.com/VladGavrila/matrixreq-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -34,9 +36,23 @@ var userListCmd = &cobra.Command{
 			return err
 		}
 		details, _ := cmd.Flags().GetBool("details")
+		filter, _ := cmd.Flags().GetString("filter")
 		users, err := svc.Users.List(details)
 		if err != nil {
 			return err
+		}
+		if filter != "" {
+			filter = strings.ToLower(filter)
+			var filtered []api.UserType
+			for _, u := range users {
+				if strings.Contains(strings.ToLower(u.Login), filter) ||
+					strings.Contains(strings.ToLower(u.Email), filter) ||
+					strings.Contains(strings.ToLower(u.FirstName), filter) ||
+					strings.Contains(strings.ToLower(u.LastName), filter) {
+					filtered = append(filtered, u)
+				}
+			}
+			users = filtered
 		}
 		if getOutputFormat() == "json" {
 			return output.PrintItem(getOutputFormat(), users)
@@ -54,6 +70,7 @@ var userListCmd = &cobra.Command{
 
 func init() {
 	userListCmd.Flags().Bool("details", false, "Include detailed information")
+	userListCmd.Flags().String("filter", "", "Filter users by login, email, or name")
 }
 
 var userGetCmd = &cobra.Command{

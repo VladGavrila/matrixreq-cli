@@ -22,10 +22,10 @@ type CategoryService interface {
 
 // CategoryFull is the full category response.
 type CategoryFull struct {
-	FolderList []api.TrimFolder         `json:"folderList,omitempty"`
-	FieldList  api.FieldListType        `json:"fieldList,omitempty"`
-	Category   api.CategoryType         `json:"category,omitempty"`
-	Enable     []string                 `json:"enable,omitempty"`
+	Folder    api.TrimFolder    `json:"folder,omitempty"`
+	FieldList []api.FieldType   `json:"fieldList,omitempty"`
+	Category  api.CategoryType  `json:"categ,omitempty"`
+	Enable    []string          `json:"enable,omitempty"`
 }
 
 // GetProjectStructAck wraps the category list response.
