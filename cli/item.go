@@ -108,7 +108,8 @@ var itemCreateCmd = &cobra.Command{
 		if getOutputFormat() == "json" {
 			return output.PrintItem(getOutputFormat(), ack)
 		}
-		fmt.Printf("Created item ID=%d, serial=%d\n", ack.ItemID, ack.Serial)
+		category := categoryFromRef(upperRef(folder))
+		fmt.Printf("Created item %s-%d\n", category, ack.Serial)
 		return nil
 	},
 }

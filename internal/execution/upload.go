@@ -237,10 +237,9 @@ func updateXTCResults(svc *service.MatrixService, project string, fm *fieldmap.F
 	}
 
 	updateReq := &api.UpdateItemRequest{
-		Title:     item.Title,
-		Reason:    "synced by mxreq",
-		Fields:    fields,
-		OnlyThose: true,
+		Title:  item.Title,
+		Reason: "synced by mxreq",
+		Fields: fields,
 	}
 
 	_, err = svc.Items.Update(project, xtcRef, updateReq)

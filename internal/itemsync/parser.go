@@ -380,6 +380,43 @@ func UpdateFunctionName(content string, lineNumber int, oldLine string, newRef s
 	return strings.Join(lines, "\n"), newLine
 }
 
+// WriteItemRefToYAML inserts an `item_ref: <newRef>` line after the matching title line
+// in a YAML definition file. The title is matched as `title: "<title>"`.
+// Returns the updated content unchanged if the title is not found or item_ref already exists.
+func WriteItemRefToYAML(content, title, newRef string) string {
+	needle := `title: "` + title + `"`
+	idx := strings.Index(content, needle)
+	if idx < 0 {
+		return content
+	}
+	// Find end of this line.
+	rest := content[idx:]
+	end := strings.Index(rest, "\n")
+	if end < 0 {
+		return content
+	}
+	insertAt := idx + end + 1
+
+	// Check if item_ref is already present on the next line.
+	nextLine := content[insertAt:]
+	if strings.HasPrefix(nextLine, "    item_ref:") || strings.HasPrefix(nextLine, "\t\titem_ref:") {
+		return content
+	}
+
+	// Detect base indentation (spaces before the `- ` list marker on this line).
+	lineStart := strings.LastIndex(content[:idx], "\n") + 1
+	prefix := ""
+	for _, ch := range content[lineStart:idx] {
+		if ch == ' ' || ch == '\t' {
+			prefix += string(ch)
+		} else {
+			break
+		}
+	}
+	insertion := prefix + "  item_ref: " + newRef + "\n"
+	return content[:insertAt] + insertion + content[insertAt:]
+}
+
 // --- YAML definition file parsing (.yaml) ---
 
 // yamlDefinitionFile is the structure of a .yaml item definition file.

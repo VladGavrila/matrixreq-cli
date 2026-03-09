@@ -82,7 +82,8 @@ var folderCreateCmd = &cobra.Command{
 		if getOutputFormat() == "json" {
 			return output.PrintItem(getOutputFormat(), ack)
 		}
-		fmt.Printf("Created folder ID=%d\n", ack.ItemID)
+		category := categoryFromRef(upperRef(parent))
+		fmt.Printf("Created folder F-%s-%d\n", category, ack.Serial)
 		return nil
 	},
 }

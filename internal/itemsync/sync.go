@@ -50,13 +50,14 @@ func Sync(svc *service.MatrixService, project string, filePath string, fm *field
 	result := &SyncResult{}
 	ext := strings.ToLower(filepath.Ext(filePath))
 	isSourceFile := ext == ".py" || ext == ".go" || ext == ".ts"
+	isYAMLFile := ext == ".yaml" || ext == ".yml"
 
-	// Read source file content for potential modification
+	// Read file content for potential modification (source files and YAML definition files).
 	var fileContent string
-	if isSourceFile {
+	if isSourceFile || isYAMLFile {
 		data, err := os.ReadFile(filePath)
 		if err != nil {
-			return nil, fmt.Errorf("reading source file: %w", err)
+			return nil, fmt.Errorf("reading file: %w", err)
 		}
 		fileContent = string(data)
 	}
@@ -113,15 +114,13 @@ func Sync(svc *service.MatrixService, project string, filePath string, fm *field
 				continue
 			}
 
-			req := &api.CreateItemRequest{
+			ack, err := svc.Items.Create(project, &api.CreateItemRequest{
 				Title:  entry.Item.Title,
 				Folder: entry.Item.Folder,
 				Reason: "synced by mxreq",
 				Fields: fieldVals,
-				Labels: entry.Item.Labels,
-			}
-
-			ack, err := svc.Items.Create(project, req)
+				Labels: labelsStr,
+			})
 			if err != nil {
 				result.Errors = append(result.Errors, SyncResultEntry{
 					Title:  entry.Item.Title,
@@ -131,15 +130,14 @@ func Sync(svc *service.MatrixService, project string, filePath string, fm *field
 				continue
 			}
 
+			newRef := fmt.Sprintf("%s-%d", category, ack.Serial)
+
 			// Create uplinks
 			if upLinks != "" {
-				newRef := fmt.Sprintf("%s-%d", category, ack.Serial)
 				for _, ref := range entry.Item.UpLinks {
 					_ = svc.Items.CreateLink(project, ref, newRef, "synced by mxreq")
 				}
 			}
-
-			newRef := fmt.Sprintf("%s-%d", category, ack.Serial)
 			result.Created = append(result.Created, SyncResultEntry{
 				Title:   entry.Item.Title,
 				ItemRef: newRef,
@@ -159,6 +157,15 @@ func Sync(svc *service.MatrixService, project string, filePath string, fm *field
 				fileModified = true
 			}
 
+			// Write item_ref back into YAML definition file
+			if isYAMLFile {
+				updated := WriteItemRefToYAML(fileContent, entry.Item.Title, newRef)
+				if updated != fileContent {
+					fileContent = updated
+					fileModified = true
+				}
+			}
+
 		case ActionUpdate:
 			if opts.DryRun {
 				result.Updated = append(result.Updated, SyncResultEntry{
@@ -171,12 +178,10 @@ func Sync(svc *service.MatrixService, project string, filePath string, fm *field
 			}
 
 			updateReq := &api.UpdateItemRequest{
-				Title:      entry.Item.Title,
-				Reason:     "synced by mxreq",
-				Fields:     fieldVals,
-				Labels:     entry.Item.Labels,
-				OnlyThose:  true,
-				OnlyLabels: true,
+				Title:  entry.Item.Title,
+				Reason: "synced by mxreq",
+				Fields: fieldVals,
+				Labels: strings.Join(entry.Item.Labels, ","),
 			}
 
 			_, err := svc.Items.Update(project, entry.Item.ItemRef, updateReq)
@@ -209,10 +214,10 @@ func Sync(svc *service.MatrixService, project string, filePath string, fm *field
 		}
 	}
 
-	// Write back modified source file
-	if isSourceFile && fileModified && !opts.DryRun {
+	// Write back modified file (source files and YAML definition files)
+	if (isSourceFile || isYAMLFile) && fileModified && !opts.DryRun {
 		if err := os.WriteFile(filePath, []byte(fileContent), 0o644); err != nil {
-			return result, fmt.Errorf("writing modified source file: %w", err)
+			return result, fmt.Errorf("writing modified file: %w", err)
 		}
 	}
 

@@ -14,7 +14,7 @@ import (
 )
 
 // Version is set at build time via ldflags.
-var Version = "1.1.0"
+var Version = "1.1.1"
 
 var (
 	flagURL     string
@@ -86,6 +86,22 @@ func requireProject() (string, error) {
 // upperRef uppercases an item ref, folder ref, or category label for the API.
 func upperRef(s string) string {
 	return strings.ToUpper(s)
+}
+
+// categoryFromRef extracts the category short label from a folder ref (e.g. "F-SOFT-1" → "SOFT").
+func categoryFromRef(ref string) string {
+	if strings.HasPrefix(ref, "F-") {
+		rest := ref[2:]
+		idx := strings.LastIndex(rest, "-")
+		if idx > 0 {
+			return rest[:idx]
+		}
+	}
+	idx := strings.Index(ref, "-")
+	if idx > 0 {
+		return ref[:idx]
+	}
+	return ref
 }
 
 // newService creates a MatrixService from config/flags.

@@ -62,7 +62,22 @@ func (s *itemService) GetFolder(project, folderRef string, history bool) (*api.T
 }
 
 func (s *itemService) Create(project string, req *api.CreateItemRequest) (*api.AddItemAck, error) {
-	data, err := s.client.Post("/"+url.PathEscape(project)+"/item", req)
+	params := url.Values{}
+	params.Set("title", req.Title)
+	params.Set("folder", req.Folder)
+	params.Set("reason", req.Reason)
+	if req.Labels != "" {
+		params.Set("labels", req.Labels)
+	}
+	if req.Author != "" {
+		params.Set("author", req.Author)
+	}
+	for _, f := range req.Fields {
+		params.Set(fmt.Sprintf("fx%d", f.ID), f.Value)
+	}
+
+	path := fmt.Sprintf("/%s/item?%s", url.PathEscape(project), params.Encode())
+	data, err := s.client.Post(path, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -74,8 +89,20 @@ func (s *itemService) Create(project string, req *api.CreateItemRequest) (*api.A
 }
 
 func (s *itemService) Update(project, itemRef string, req *api.UpdateItemRequest) (*api.TrimItem, error) {
-	path := fmt.Sprintf("/%s/item/%s", url.PathEscape(project), url.PathEscape(itemRef))
-	data, err := s.client.Put(path, req)
+	params := url.Values{}
+	params.Set("reason", req.Reason)
+	if req.Title != "" {
+		params.Set("title", req.Title)
+	}
+	if req.Labels != "" {
+		params.Set("labels", req.Labels)
+	}
+	for _, f := range req.Fields {
+		params.Set(fmt.Sprintf("fx%d", f.ID), f.Value)
+	}
+
+	path := fmt.Sprintf("/%s/item/%s?%s", url.PathEscape(project), url.PathEscape(itemRef), params.Encode())
+	data, err := s.client.Put(path, nil)
 	if err != nil {
 		return nil, err
 	}

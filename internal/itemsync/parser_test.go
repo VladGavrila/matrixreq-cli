@@ -373,6 +373,43 @@ func TestUpdateFunctionNameTypeScript(t *testing.T) {
 	_ = newLine
 }
 
+func TestWriteItemRefToYAML(t *testing.T) {
+	content := `items:
+  - title: "Config Precedence"
+    folder: F-SOFT-1
+    fields:
+      Description: "some text"
+    labels:
+      - Draft
+
+  - title: "XDG Config"
+    folder: F-SOFT-1
+    fields:
+      Description: "another"
+`
+	// Insert into first entry
+	got := WriteItemRefToYAML(content, "Config Precedence", "SOFT-100")
+	if !strings.Contains(got, "  item_ref: SOFT-100\n    folder: F-SOFT-1") {
+		t.Errorf("item_ref not inserted correctly:\n%s", got)
+	}
+	// Second entry unchanged
+	if strings.Contains(got, "item_ref: SOFT-100\n    folder: F-SOFT-1\n    fields:\n      Description: \"another\"") {
+		t.Errorf("wrong entry modified")
+	}
+
+	// Idempotent: calling again should not duplicate
+	got2 := WriteItemRefToYAML(got, "Config Precedence", "SOFT-100")
+	if got2 != got {
+		t.Errorf("WriteItemRefToYAML is not idempotent")
+	}
+
+	// Title not found returns content unchanged
+	got3 := WriteItemRefToYAML(content, "Nonexistent Title", "SOFT-999")
+	if got3 != content {
+		t.Errorf("expected content unchanged for missing title")
+	}
+}
+
 func TestParseYAMLDefinitionsFromString(t *testing.T) {
 	yaml := `items:
   - title: "System shall validate input"

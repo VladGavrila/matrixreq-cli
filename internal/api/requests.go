@@ -6,18 +6,16 @@ type CreateItemRequest struct {
 	Folder string            `json:"folder,omitempty"`
 	Reason string            `json:"reason"`
 	Fields []FieldValSetType `json:"fieldVal,omitempty"`
-	Labels []string          `json:"labels,omitempty"`
+	Labels string            `json:"labels,omitempty"`
 	Author string            `json:"author,omitempty"`
 }
 
 // UpdateItemRequest is the body for updating an item.
 type UpdateItemRequest struct {
-	Title    string            `json:"title,omitempty"`
-	Reason   string            `json:"reason"`
-	Fields   []FieldValSetType `json:"fieldVal,omitempty"`
-	Labels   []string          `json:"labels,omitempty"`
-	OnlyThose bool            `json:"onlyThoseFields,omitempty"`
-	OnlyLabels bool           `json:"onlyThoseLabels,omitempty"`
+	Title  string            `json:"title,omitempty"`
+	Reason string            `json:"reason"`
+	Fields []FieldValSetType `json:"fieldVal,omitempty"`
+	Labels string            `json:"labels,omitempty"`
 }
 
 // FieldValSetType is used to set a field value on create/update.
