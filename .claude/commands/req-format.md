@@ -1,6 +1,7 @@
 ---
 description: Convert requirements into MatrixALM YAML definition format
 argument-hint: <requirements text or description>
+model: claude-sonnet-4-6
 ---
 
 # Generate MatrixALM Requirements YAML

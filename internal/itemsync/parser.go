@@ -431,6 +431,7 @@ type yamlItemDef struct {
 	Fields  map[string]string `yaml:"fields"`
 	Labels  []string          `yaml:"labels"`
 	UpLinks string            `yaml:"up_links"`
+	Steps   []yamlStep        `yaml:"steps"`
 }
 
 // ParseYAMLDefinitions parses a .yaml file containing item definitions.
@@ -454,6 +455,16 @@ func ParseYAMLDefinitionsFromString(content string) ([]ItemDef, error) {
 		fields := def.Fields
 		if fields == nil {
 			fields = make(map[string]string)
+		}
+
+		if len(def.Steps) > 0 {
+			if _, ok := fields["Steps"]; !ok {
+				stepsJSON, err := stepsToJSON(def.Steps)
+				if err != nil {
+					return nil, fmt.Errorf("serializing steps for %q: %w", def.Title, err)
+				}
+				fields["Steps"] = stepsJSON
+			}
 		}
 
 		var upLinks []string
