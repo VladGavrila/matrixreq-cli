@@ -14,7 +14,7 @@ import (
 )
 
 // Version is set at build time via ldflags.
-var Version = "1.2.0"
+var Version = "1.3.0"
 
 var (
 	flagURL     string

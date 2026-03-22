@@ -107,9 +107,10 @@ assert_fail \
   "item update rejects missing args" \
   "$BIN" item update
 
-assert_fail \
-  "item update rejects missing --reason" \
-  "$BIN" item update REQ-1
+assert_output_contains \
+  "item update --help shows --field" \
+  "--field" \
+  "$BIN" item update --help
 
 assert_fail \
   "item delete rejects missing args" \

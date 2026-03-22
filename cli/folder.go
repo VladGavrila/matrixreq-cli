@@ -2,7 +2,10 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
+	"github.com/VladGavrila/matrixreq-cli/internal/api"
+	"github.com/VladGavrila/matrixreq-cli/internal/fieldmap"
 	"github.com/VladGavrila/matrixreq-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -11,6 +14,7 @@ func init() {
 	rootCmd.AddCommand(folderCmd)
 	folderCmd.AddCommand(folderGetCmd)
 	folderCmd.AddCommand(folderCreateCmd)
+	folderCmd.AddCommand(folderUpdateCmd)
 }
 
 var folderCmd = &cobra.Command{
@@ -95,4 +99,76 @@ func init() {
 	_ = folderCreateCmd.MarkFlagRequired("parent")
 	_ = folderCreateCmd.MarkFlagRequired("label")
 	_ = folderCreateCmd.MarkFlagRequired("reason")
+}
+
+var folderUpdateCmd = &cobra.Command{
+	Use:   "update <folderRef>",
+	Short: "Update a folder (title, fields)",
+	Args:  cobra.ExactArgs(1),
+	RunE: func(cmd *cobra.Command, args []string) error {
+		svc, err := newService()
+		if err != nil {
+			return err
+		}
+		project, err := requireProject()
+		if err != nil {
+			return err
+		}
+		title, _ := cmd.Flags().GetString("title")
+		reason, _ := cmd.Flags().GetString("reason")
+		if reason == "" {
+			reason = "Updated by mxreq CLI"
+		}
+		description, _ := cmd.Flags().GetString("description")
+		fieldFlags, _ := cmd.Flags().GetStringArray("field")
+
+		ref := upperRef(args[0])
+
+		req := &api.UpdateItemRequest{
+			Title:  title,
+			Reason: reason,
+		}
+
+		if description != "" || len(fieldFlags) > 0 {
+			fm, err := fieldmap.LoadOrFetch(svc, project)
+			if err != nil {
+				return fmt.Errorf("loading field map: %w", err)
+			}
+			if description != "" {
+				id, err := fm.DescriptionField("FOLDER")
+				if err != nil {
+					return err
+				}
+				req.Fields = append(req.Fields, api.FieldValSetType{ID: id, Value: description})
+			}
+			for _, f := range fieldFlags {
+				parts := strings.SplitN(f, "=", 2)
+				if len(parts) != 2 {
+					return fmt.Errorf("invalid --field format %q, expected fieldName=value", f)
+				}
+				id, err := fm.Resolve("FOLDER", parts[0])
+				if err != nil {
+					return err
+				}
+				req.Fields = append(req.Fields, api.FieldValSetType{ID: id, Value: parts[1]})
+			}
+		}
+
+		item, err := svc.Items.Update(project, ref, req)
+		if err != nil {
+			return err
+		}
+		if getOutputFormat() == "json" {
+			return output.PrintItem(getOutputFormat(), item)
+		}
+		fmt.Printf("Updated %s: %s (v%d)\n", item.ItemRef, item.Title, item.MaxVersion)
+		return nil
+	},
+}
+
+func init() {
+	folderUpdateCmd.Flags().String("title", "", "New folder title")
+	folderUpdateCmd.Flags().StringP("description", "d", "", "Folder description (auto-resolves the field)")
+	folderUpdateCmd.Flags().StringArrayP("field", "f", nil, "Set field value (format: fieldName=value, repeatable)")
+	folderUpdateCmd.Flags().StringP("reason", "r", "", "Reason for update (default: Updated by mxreq CLI)")
 }

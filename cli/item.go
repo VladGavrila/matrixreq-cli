@@ -2,8 +2,10 @@ package cli
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/VladGavrila/matrixreq-cli/internal/api"
+	"github.com/VladGavrila/matrixreq-cli/internal/fieldmap"
 	"github.com/VladGavrila/matrixreq-cli/internal/output"
 	"github.com/spf13/cobra"
 )
@@ -138,12 +140,38 @@ var itemUpdateCmd = &cobra.Command{
 		}
 		title, _ := cmd.Flags().GetString("title")
 		reason, _ := cmd.Flags().GetString("reason")
+		if reason == "" {
+			reason = "Updated by mxreq CLI"
+		}
+		fieldFlags, _ := cmd.Flags().GetStringArray("field")
+
+		ref := upperRef(args[0])
+		category := categoryFromRef(ref)
 
 		req := &api.UpdateItemRequest{
 			Title:  title,
 			Reason: reason,
 		}
-		item, err := svc.Items.Update(project, upperRef(args[0]), req)
+
+		if len(fieldFlags) > 0 {
+			fm, err := fieldmap.LoadOrFetch(svc, project)
+			if err != nil {
+				return fmt.Errorf("loading field map: %w", err)
+			}
+			for _, f := range fieldFlags {
+				parts := strings.SplitN(f, "=", 2)
+				if len(parts) != 2 {
+					return fmt.Errorf("invalid --field format %q, expected fieldName=value", f)
+				}
+				id, err := fm.Resolve(category, parts[0])
+				if err != nil {
+					return err
+				}
+				req.Fields = append(req.Fields, api.FieldValSetType{ID: id, Value: parts[1]})
+			}
+		}
+
+		item, err := svc.Items.Update(project, ref, req)
 		if err != nil {
 			return err
 		}
@@ -157,8 +185,8 @@ var itemUpdateCmd = &cobra.Command{
 
 func init() {
 	itemUpdateCmd.Flags().String("title", "", "New title")
-	itemUpdateCmd.Flags().StringP("reason", "r", "", "Reason for update")
-	_ = itemUpdateCmd.MarkFlagRequired("reason")
+	itemUpdateCmd.Flags().StringArrayP("field", "f", nil, "Set field value (format: fieldName=value, repeatable)")
+	itemUpdateCmd.Flags().StringP("reason", "r", "", "Reason for update (default: Updated by mxreq CLI)")
 }
 
 var itemDeleteCmd = &cobra.Command{

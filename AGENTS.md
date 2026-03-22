@@ -356,3 +356,5 @@ When the user requests release notes after completing an implementation:
    var version = "<new-version>"
    ```
 3. Confirm the build passes with `make build` and that `mxreq --version` prints the new version.
+
+4. Write the release notes in a RELEASE_<new-version>.md file

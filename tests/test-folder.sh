@@ -43,6 +43,31 @@ assert_output_contains \
   "--reason" \
   "$BIN" folder create --help
 
+assert_output_contains \
+  "folder update --help shows <folderRef>" \
+  "<folderRef>" \
+  "$BIN" folder update --help
+
+assert_output_contains \
+  "folder update --help shows --title" \
+  "--title" \
+  "$BIN" folder update --help
+
+assert_output_contains \
+  "folder update --help shows --description" \
+  "--description" \
+  "$BIN" folder update --help
+
+assert_output_contains \
+  "folder update --help shows --field" \
+  "--field" \
+  "$BIN" folder update --help
+
+assert_output_contains \
+  "folder update --help shows --reason" \
+  "--reason" \
+  "$BIN" folder update --help
+
 # ---------------------------------------------------------------------------
 # Validation tests (offline)
 # ---------------------------------------------------------------------------
@@ -62,6 +87,10 @@ assert_fail \
 assert_fail \
   "folder create rejects missing --reason" \
   "$BIN" folder create --parent F-REQ-1 --label "Test"
+
+assert_fail \
+  "folder update rejects missing args" \
+  "$BIN" folder update
 
 # ---------------------------------------------------------------------------
 # Live tests
@@ -98,6 +127,18 @@ if ! skip_live; then
   assert \
     "folder get succeeds" \
     "$BIN" folder get "$PARENT" -p "$PROJ"
+
+  if [[ -n "$SUB_FOLDER_REF" ]]; then
+    assert_output_contains \
+      "folder update title succeeds" \
+      "Updated" \
+      "$BIN" folder update "$SUB_FOLDER_REF" -p "$PROJ" --title "UpdatedFolder${ID}" -r "smoke update"
+
+    assert_output_contains \
+      "folder update -o json succeeds" \
+      "itemRef" \
+      "$BIN" folder update "$SUB_FOLDER_REF" -p "$PROJ" --title "FinalFolder${ID}" -r "smoke update json" -o json
+  fi
 
   trap - EXIT
   cleanup_subfolder

@@ -38,6 +38,31 @@ func (fm *FieldMap) Resolve(category, label string) (int, error) {
 	return id, nil
 }
 
+// DescriptionField returns the field ID for the content/description field of a category.
+// It looks for "Description" first, then "Contents", then falls back to the only field if exactly one exists.
+func (fm *FieldMap) DescriptionField(category string) (int, error) {
+	fields := fm.FieldsForCategory(category)
+	if len(fields) == 0 {
+		return 0, fmt.Errorf("category %q has no fields", category)
+	}
+	for _, name := range []string{"Description", "Contents"} {
+		if id, ok := fields[name]; ok {
+			return id, nil
+		}
+	}
+	if len(fields) == 1 {
+		for _, id := range fields {
+			return id, nil
+		}
+	}
+	var names []string
+	for name := range fields {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return 0, fmt.Errorf("category %q has no Description/Contents field; available fields: %s — use --field name=value", category, strings.Join(names, ", "))
+}
+
 // FieldsForCategory returns all field label→ID mappings for a given category.
 func (fm *FieldMap) FieldsForCategory(category string) map[string]int {
 	result := make(map[string]int)
