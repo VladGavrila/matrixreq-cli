@@ -27,10 +27,10 @@
 │   │   ├── responses.go       # AddItemAck, CopyItemAck, ListProjectAndSettings, etc.
 │   │   └── <domain>.go        # users, groups, todos, search, jobs, files, audit, merge
 │   ├── client/                # HTTP client with token auth
-│   │   ├── client.go          # Get/Post/Put/Delete/PostForm/GetRaw methods
+│   │   ├── client.go          # Get/Post/Put/Delete/PostForm/GetRaw + Wfgw* methods
 │   │   └── errors.go          # APIError type, IsNotFound/IsUnauthorized/IsForbidden
 │   ├── config/                # Viper-based config (XDG: ~/.config/mxreq/config.yaml)
-│   │   └── config.go          # Config struct, Load(), Save(), Validate(), ConfigPath()
+│   │   └── config.go          # Config struct (url/token/default_project/jira_base_url)
 │   ├── service/               # Business logic — interface-based domain services
 │   │   ├── service.go         # MatrixService aggregate (holds all services + Client)
 │   │   └── <domain>.go        # projects, items, categories, fields, users, groups, etc.
@@ -82,20 +82,36 @@ Flags > Environment vars > Config file (`~/.config/mxreq/config.yaml`)
 | `--url` | `MATRIX_URL` | `url` |
 | `--token` | `MATRIX_TOKEN` | `token` |
 | `--project` / `-p` | `MATRIX_DEFAULT_PROJECT` | `default_project` |
+| `--jira-base` (on `jira add` only) | `MATRIX_JIRA_BASE_URL` | `jira_base_url` |
 | `--output` / `-o` | — | — |
 | `--debug` | — | — |
+
+The `jira_base_url` key is set interactively via `mxreq jira init` and used to
+build Jira `browse` URLs when linking issues (see the Jira Links subsystem).
 
 ### Debugging
 `--debug` prints every HTTP request and response as pretty-printed JSON to stderr. Output includes method, full URL, request body, response status, and response body. Normal command output goes to stdout unaffected. Implemented in `internal/client/client.go` via `debugRequest()`/`debugResponse()` helpers called from every HTTP method. The flag is passed from `cli/root.go` → `client.New(url, token, debug)`.
 
 ### API Base Path
-The client automatically appends `/rest/1` to the base URL (e.g., `http://host:8080` → `http://host:8080/rest/1`).
+The client automatically appends `/rest/1` to the base URL (e.g., `http://host:8080` → `http://host:8080/rest/1`). All standard `Get/Post/Put/Delete` methods target this path.
+
+For the workflow gateway at `/rest/2/wfgw/` (used by the Jira links subsystem), the client exposes a parallel trio: `WfgwGet`, `WfgwPostForm`, and `WfgwDeleteJSON`. They derive the root from `baseURL` (stripping `/rest/1`), reuse the same auth/debug/httpClient pipeline, and translate the HTML `HTTP Status 500` page that the Jira add-on returns for unconfigured projects into a friendly error. Use these methods when targeting any non-`/rest/1` endpoint — don't build ad-hoc requests.
 
 ### Authentication
 `Authorization: Token <value>` header on every request.
 
 ### Write Operations
 Commands that modify data require `--reason` / `-r` flag, marked as required via `MarkFlagRequired("reason")`.
+
+**Exception — wfgw endpoints:** the `/rest/2/wfgw/` endpoint does **not** accept a `reason` parameter, so commands in that family (currently `jira add` and `jira remove`) still require `--reason` for CLI consistency but consume the value locally (displayed in the plan/confirmation output) rather than sending it to the server. Do the same for any future wfgw-backed write commands.
+
+### Preflight checks
+Some commands depend on config beyond `url`/`token` (e.g., `jira_base_url` for Jira links). Those commands should fail fast at the top of their `RunE` with a clear message rather than making HTTP calls that return misleading empty results. The pattern for Jira commands lives in `cli/jira.go`:
+
+- `resolveJiraBase(flagVal)` — used by `jira add`, returns the effective base URL or an error that mentions both the `init` command and the `--jira-base` escape hatch.
+- `requireJiraConfigured()` — used by `jira get` and `jira remove` (which don't consume the URL directly), returns an error pointing only at `jira init`.
+
+Call these before `newService()` so the preflight runs even if other config is also missing.
 
 ## Adding a New Command
 
@@ -336,15 +352,26 @@ Uploads test execution results. Maps test cases (TC) to execution cases (XTC) vi
 ### Templates (`internal/templates/`)
 Embedded templates for Go/Python/TypeScript scaffolding. Used by `cli/init_templates.go`.
 
+### Jira Links (`internal/service/jira.go`, `internal/api/jira.go`, `cli/jira.go`)
+Manages external Matrix ↔ Jira issue links via the `/rest/2/wfgw/` workflow gateway (plugin 212 by default). This is orthogonal to Matrix's internal uplinks/downlinks — those still flow through `ItemService.CreateLink/DeleteLink` on `/rest/1`.
+
+- `JiraService.GetLinks/CreateLinks/BreakLinks` map to the three wfgw actions (`GetIssues`, `CreateLinks`, `BreakLinks`) and use the client's `Wfgw*` transport methods.
+- Request/response types in `internal/api/jira.go` — note the unusual shapes: `GetIssues` returns a top-level array; `CreateLinks` is POSTed as `application/x-www-form-urlencoded` with a `payload=<json>` body; `BreakLinks` is a DELETE with a JSON body (Go supports this, not all HTTP clients do).
+- `cli/jira.go` implements `jira init` (persists `jira_base_url` to config), `jira get`, `jira add`, and `jira remove`. Preflight helpers are documented in the Preflight checks section above.
+- **Ghost-item validation:** `jira add` fetches each target item and rejects placeholders (empty title + `v0`) inline before mutating — ghost items are a sign the real item lives in a different project. Skippable via `--skip-validate`.
+- **Duplicate guard:** `jira add` runs `GetLinks` per item before calling `CreateLinks` so already-linked Jira keys are skipped and reported. The API is idempotent, but the guard is what lets the CLI print a meaningful plan and exit 0 when there's nothing to do.
+- **Auto-pick on remove:** `jira remove` with no `--issue` will auto-select the single existing link on an item. Zero links → error; multiple links → error listing the candidate keys.
+
 ## Common Pitfalls
 
-1. **Base URL `/rest/1` suffix** — The client appends `/rest/1` automatically. Don't include it in service paths.
+1. **Base URL `/rest/1` suffix** — The client appends `/rest/1` automatically. Don't include it in service paths. For `/rest/2/wfgw/`, use the dedicated `Wfgw*` client methods instead of hand-building requests.
 2. **URL encoding** — Always use `url.PathEscape()` for path segments and `url.QueryEscape()` for query params.
 3. **Lipgloss table API** — `Row()` takes variadic `...string`, not `[]string`. Use `Row(slice...)` to unpack.
-4. **Config validation** — `config.Validate()` requires both `URL` and `Token`. Commands that don't need the API (like `config init`, `version`) skip `newService()`.
+4. **Config validation** — `config.Validate()` requires both `URL` and `Token`. Commands that don't need the API (like `config init`, `version`, `jira init`) skip `newService()`. Commands that require additional config beyond URL/token (e.g., `jira_base_url`) should preflight-check it before calling `newService()`.
 5. **JSON output** — Always check `getOutputFormat() == "json"` before building table rows, to avoid unnecessary work.
 6. **Required flags** — Use `MarkFlagRequired()` in `init()` — cobra handles validation before `RunE` runs.
 7. **Project resolution** — `requireProject()` checks flag first, then config `default_project`. Fail early if neither set.
+8. **wfgw idiosyncrasies** — The wfgw endpoint returns a raw HTML `HTTP Status 500` page (not JSON) when a project lacks the required add-on. The `Wfgw*` helpers detect this and translate it into a friendly error; don't second-guess that check by bypassing them.
 
 ## Release
 
