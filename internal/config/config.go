@@ -13,6 +13,7 @@ type Config struct {
 	URL            string `mapstructure:"url"`
 	Token          string `mapstructure:"token"`
 	DefaultProject string `mapstructure:"default_project"`
+	JiraBaseURL    string `mapstructure:"jira_base_url"`
 }
 
 // configDir returns the XDG-compliant config directory for mxreq.
@@ -49,6 +50,7 @@ func Load() (*Config, error) {
 	_ = viper.BindEnv("url")
 	_ = viper.BindEnv("token")
 	_ = viper.BindEnv("default_project")
+	_ = viper.BindEnv("jira_base_url")
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); !ok {
@@ -76,6 +78,7 @@ func Save(cfg *Config) error {
 	viper.Set("url", cfg.URL)
 	viper.Set("token", cfg.Token)
 	viper.Set("default_project", cfg.DefaultProject)
+	viper.Set("jira_base_url", cfg.JiraBaseURL)
 
 	path := filepath.Join(dir, "config.yaml")
 	return viper.WriteConfigAs(path)

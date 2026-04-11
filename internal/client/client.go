@@ -7,6 +7,7 @@ import (
 	"io"
 	"mime/multipart"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -237,6 +238,83 @@ func (c *Client) PostForm(path string, fields map[string]string, fileName string
 		fmt.Fprintln(os.Stderr, string(out))
 	}
 	return c.Do(req)
+}
+
+// wfgwURL returns the full URL for the /rest/2/wfgw/ endpoint, derived from the
+// baseURL so we can reach a different API version through the same client.
+func (c *Client) wfgwURL() string {
+	return strings.TrimSuffix(c.baseURL, "/rest/1") + "/rest/2/wfgw/"
+}
+
+// wfgwDo sends a pre-built wfgw request through the existing Do pipeline,
+// and translates the HTML 500 page that an unconfigured Jira add-on returns
+// into a friendly error.
+func (c *Client) wfgwDo(req *http.Request, debugBody []byte) ([]byte, error) {
+	req.Header.Set("Authorization", "Token "+c.token)
+	c.debugRequest(req, debugBody)
+	data, err := c.Do(req)
+	if err != nil {
+		if apiErr, ok := err.(*APIError); ok && strings.HasPrefix(strings.TrimSpace(apiErr.Body), "<") {
+			return nil, fmt.Errorf("wfgw returned HTML (likely HTTP %d) — the Jira add-on may not be configured for this project. Check Matrix Admin > Plugins > Jira Cloud", apiErr.StatusCode)
+		}
+		return nil, err
+	}
+	if len(data) > 0 && data[0] == '<' {
+		return nil, fmt.Errorf("wfgw returned HTML instead of JSON — the Jira add-on may not be configured for this project. Check Matrix Admin > Plugins > Jira Cloud")
+	}
+	return data, nil
+}
+
+// WfgwGet performs a GET /rest/2/wfgw/?payload=<json> request.
+func (c *Client) WfgwGet(payload any) ([]byte, error) {
+	jsonBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling wfgw payload: %w", err)
+	}
+	u := c.wfgwURL() + "?payload=" + url.QueryEscape(string(jsonBytes))
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("creating wfgw request: %w", err)
+	}
+	return c.wfgwDo(req, nil)
+}
+
+// WfgwPostForm performs a POST /rest/2/wfgw/ with an application/x-www-form-urlencoded
+// body of payload=<json>.
+func (c *Client) WfgwPostForm(payload any) ([]byte, error) {
+	jsonBytes, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling wfgw payload: %w", err)
+	}
+	form := url.Values{}
+	form.Set("payload", string(jsonBytes))
+	body := form.Encode()
+	req, err := http.NewRequest(http.MethodPost, c.wfgwURL(), strings.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("creating wfgw request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	return c.wfgwDo(req, jsonBytes)
+}
+
+// WfgwDeleteJSON performs a DELETE /rest/2/wfgw/ with a JSON body.
+func (c *Client) WfgwDeleteJSON(body any) ([]byte, error) {
+	var bodyBytes []byte
+	if body != nil {
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(body); err != nil {
+			return nil, fmt.Errorf("marshaling wfgw body: %w", err)
+		}
+		bodyBytes = bytes.TrimRight(buf.Bytes(), "\n")
+	}
+	req, err := http.NewRequest(http.MethodDelete, c.wfgwURL(), bytes.NewReader(bodyBytes))
+	if err != nil {
+		return nil, fmt.Errorf("creating wfgw request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	return c.wfgwDo(req, bodyBytes)
 }
 
 // GetRaw performs a GET request and returns the raw response (for file downloads).

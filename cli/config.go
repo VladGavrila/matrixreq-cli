@@ -91,6 +91,11 @@ var configShowCmd = &cobra.Command{
 			fmt.Printf("Token:       (not set)\n")
 		}
 		fmt.Printf("Project:     %s\n", cfg.DefaultProject)
+		jiraBase := cfg.JiraBaseURL
+		if jiraBase == "" {
+			jiraBase = "(not set)"
+		}
+		fmt.Printf("Jira base:   %s\n", jiraBase)
 		return nil
 	},
 }

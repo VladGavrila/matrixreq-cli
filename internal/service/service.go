@@ -19,6 +19,7 @@ type MatrixService struct {
 	Admin      AdminService
 	Branches   BranchService
 	Settings   SettingsService
+	Jira       JiraService
 }
 
 // New creates a MatrixService with all domain services wired up.
@@ -39,5 +40,6 @@ func New(c *client.Client) *MatrixService {
 		Admin:      &adminService{client: c},
 		Branches:   &branchService{client: c},
 		Settings:   &settingsService{client: c},
+		Jira:       &jiraService{client: c},
 	}
 }
