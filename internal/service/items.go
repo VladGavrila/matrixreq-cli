@@ -23,6 +23,7 @@ type ItemService interface {
 	Touch(project, itemRef, reason string) error
 	CreateLink(project, upItem, downItem, reason string) error
 	DeleteLink(project, upItem, downItem, reason string) error
+	Execute(project string, req *api.ExecuteRequest) (*api.ExecuteResponse, error)
 }
 
 type itemService struct {
@@ -193,4 +194,17 @@ func (s *itemService) DeleteLink(project, upItem, downItem, reason string) error
 		url.PathEscape(downItem), url.QueryEscape(reason))
 	_, err := s.client.Delete(path)
 	return err
+}
+
+func (s *itemService) Execute(project string, req *api.ExecuteRequest) (*api.ExecuteResponse, error) {
+	path := fmt.Sprintf("/%s/execute", url.PathEscape(project))
+	data, err := s.client.Post(path, req)
+	if err != nil {
+		return nil, fmt.Errorf("executing test cases: %w", err)
+	}
+	var resp api.ExecuteResponse
+	if err := json.Unmarshal(data, &resp); err != nil {
+		return nil, fmt.Errorf("parsing execute response: %w", err)
+	}
+	return &resp, nil
 }

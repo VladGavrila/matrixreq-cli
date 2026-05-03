@@ -162,3 +162,37 @@ type ItemSimpleType struct {
 	Title   string `json:"title"`
 	Version int    `json:"version,omitempty"`
 }
+
+// ExecuteRequest is the payload for POST /{project}/execute.
+type ExecuteRequest struct {
+	Input            []string          `json:"input"`
+	Output           string            `json:"output"`
+	ParentFolder     string            `json:"parentFolder"`
+	Reason           string            `json:"reason"`
+	ItemPresets      []ExecutePreset   `json:"itemPresets,omitempty"`
+	ItemFieldMapping []ExecuteFieldMap `json:"itemFieldMapping,omitempty"`
+}
+
+// ExecutePreset sets a field to a fixed value on all created XTC items.
+type ExecutePreset struct {
+	Field int    `json:"field"`
+	Value string `json:"value"`
+}
+
+// ExecuteFieldMap copies a field value from the TC to the XTC.
+type ExecuteFieldMap struct {
+	FromID int `json:"fromId"`
+	ToID   int `json:"toId"`
+}
+
+// ExecuteResponse is returned by POST /{project}/execute.
+type ExecuteResponse struct {
+	Folder     string         `json:"folder"`
+	XTCInError []ExecuteError `json:"xtcInError,omitempty"`
+}
+
+// ExecuteError describes a TC that could not be executed.
+type ExecuteError struct {
+	Key    string   `json:"key"`
+	Errors []string `json:"errors"`
+}

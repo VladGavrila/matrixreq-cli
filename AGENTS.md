@@ -346,6 +346,18 @@ Parses test files (Python/Go/TypeScript) and YAML definition files to sync items
 - Automatic function renaming after creation (e.g., `test_NEW_foo` → `test_TC_42_foo`)
 - Diff comparison (fields, labels, links) with whitespace/JSON normalization
 
+### XTC Commands (`cli/xtc.go`)
+Four subcommands under `mxreq xtc`:
+
+| Subcommand | What it does |
+|------------|-------------|
+| `xtc create` | Creates an XTC run folder from one or more TC folders (`POST /{project}/execute`). Accepts `--map Category.Label=Category.Label` to copy TC field values onto XTC items, and `--preset Category.Label=Value` to hard-set fields on all created XTC items. `--dry-run` prints the resolved request JSON without calling the API. |
+| `xtc execute` | Combines `create` and `upload` in one shot: creates the XTC run (unless `--folder` is given to reuse an existing one) then immediately uploads results. Requires `--results <file>` or `--results-dir <dir>` (picks latest `results_*.yaml` automatically). |
+| `xtc upload` | Uploads a results YAML into an existing XTC folder without creating a new run. |
+| `xtc stats` | Fetches all XTCs in a folder and prints per-test status, step counts, and requirement coverage totals. |
+
+Field label resolution in `--map` and `--preset` goes through `resolveFieldLabel(fm, spec)`, a local helper that splits `"Category.Label"` and calls `fm.Resolve()` against the cached fieldmap. No extra HTTP calls are made per flag.
+
 ### Execution Upload (`internal/execution/`)
 Uploads test execution results. Maps test cases (TC) to execution cases (XTC) via title parsing (expects `"Title (TC-1377)"` format). Tracks worst-case requirement coverage across multiple test cases.
 
