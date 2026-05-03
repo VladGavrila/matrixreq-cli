@@ -5,6 +5,7 @@ A command-line interface for the [MatrixREQ](https://docs.matrixreq.com/en/) RES
 ## Installation
 
 Download a pre-built binary from the [Releases](https://github.com/VladGavrila/matrixreq-cli/releases) page
+* The `.zip` artifact is signed and does not need removing the quarantine flag
 
 ### macOS
 #### move to a folder in $PATH and make executable
