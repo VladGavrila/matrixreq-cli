@@ -193,6 +193,39 @@ func (c *Client) Delete(path string) ([]byte, error) {
 	return c.Do(req)
 }
 
+// PostFormURLEncoded performs a POST request with an
+// application/x-www-form-urlencoded body. Used for write endpoints whose
+// parameter payloads can exceed URL length limits.
+func (c *Client) PostFormURLEncoded(path string, form url.Values) ([]byte, error) {
+	return c.doFormURLEncoded(http.MethodPost, path, form)
+}
+
+// PutFormURLEncoded performs a PUT request with an
+// application/x-www-form-urlencoded body.
+func (c *Client) PutFormURLEncoded(path string, form url.Values) ([]byte, error) {
+	return c.doFormURLEncoded(http.MethodPut, path, form)
+}
+
+func (c *Client) doFormURLEncoded(method, path string, form url.Values) ([]byte, error) {
+	body := form.Encode()
+	req, err := http.NewRequest(method, c.baseURL+path, strings.NewReader(body))
+	if err != nil {
+		return nil, fmt.Errorf("creating request: %w", err)
+	}
+	req.Header.Set("Authorization", "Token "+c.token)
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	if c.debug {
+		entry := map[string]any{
+			"type":   "request",
+			"method": req.Method,
+			"url":    req.URL.String(),
+			"body":   form,
+		}
+		fmt.Fprintln(os.Stderr, string(c.debugJSON(entry)))
+	}
+	return c.Do(req)
+}
+
 // PostForm performs a POST request with a multipart form body.
 // It is used for file uploads.
 func (c *Client) PostForm(path string, fields map[string]string, fileName string, fileData io.Reader) ([]byte, error) {

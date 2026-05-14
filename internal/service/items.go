@@ -77,8 +77,8 @@ func (s *itemService) Create(project string, req *api.CreateItemRequest) (*api.A
 		params.Set(fmt.Sprintf("fx%d", f.ID), f.Value)
 	}
 
-	path := fmt.Sprintf("/%s/item?%s", url.PathEscape(project), params.Encode())
-	data, err := s.client.Post(path, nil)
+	path := fmt.Sprintf("/%s/item", url.PathEscape(project))
+	data, err := s.client.PostFormURLEncoded(path, params)
 	if err != nil {
 		return nil, err
 	}
@@ -102,8 +102,8 @@ func (s *itemService) Update(project, itemRef string, req *api.UpdateItemRequest
 		params.Set(fmt.Sprintf("fx%d", f.ID), f.Value)
 	}
 
-	path := fmt.Sprintf("/%s/item/%s?%s", url.PathEscape(project), url.PathEscape(itemRef), params.Encode())
-	data, err := s.client.Put(path, nil)
+	path := fmt.Sprintf("/%s/item/%s", url.PathEscape(project), url.PathEscape(itemRef))
+	data, err := s.client.PutFormURLEncoded(path, params)
 	if err != nil {
 		return nil, err
 	}

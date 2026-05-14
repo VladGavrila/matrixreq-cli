@@ -212,6 +212,15 @@ if ! skip_live; then
       "Restored" \
       "$BIN" item restore "$ITEM_REF" -p "$PROJ" -r "smoke restore"
 
+    # Large-payload update — regression guard for HTTP 414. With field values
+    # in the URL query string this 12 KB Description blob would overflow most
+    # servlet limits; the request body transport must accept it.
+    BIG_DESC=$(printf 'lorem ipsum dolor sit amet %.0s' {1..500})
+    assert_output_contains \
+      "item update with 12KB Description succeeds (no HTTP 414)" \
+      "Updated" \
+      "$BIN" item update "$ITEM_REF" -p "$PROJ" -f "Description=$BIG_DESC" -r "smoke large payload"
+
     # Final cleanup delete
     assert_output_contains \
       "item delete (cleanup) succeeds" \
