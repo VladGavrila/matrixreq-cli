@@ -38,12 +38,12 @@ func BuildTCToXTCMapping(folderItems []api.TrimFolder) map[string]api.TrimFolder
 // UploadResults uploads execution results to XTCs in a folder.
 func UploadResults(svc *service.MatrixService, project string, folderRef string, results *ExecutionResults, fm *fieldmap.FieldMap) (*UploadResult, error) {
 	// Get folder items to build TC→XTC mapping
-	folder, err := svc.Items.GetFolder(project, folderRef, false)
+	folderItems, err := resolveFolderItems(svc, project, folderRef)
 	if err != nil {
 		return nil, fmt.Errorf("getting folder: %w", err)
 	}
 
-	tcToXTC := BuildTCToXTCMapping(folder.ItemList)
+	tcToXTC := BuildTCToXTCMapping(folderItems)
 	if len(tcToXTC) == 0 {
 		return nil, fmt.Errorf("no XTCs found in folder %s", folderRef)
 	}

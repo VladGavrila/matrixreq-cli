@@ -103,13 +103,13 @@ func (s *ExecutionStats) ToDict() map[string]interface{} {
 
 // ComputeStats calculates execution statistics for all XTCs in a folder.
 func ComputeStats(svc *service.MatrixService, project string, folderRef string, fm *fieldmap.FieldMap) (*ExecutionStats, error) {
-	folder, err := svc.Items.GetFolder(project, folderRef, false)
+	folderItems, err := resolveFolderItems(svc, project, folderRef)
 	if err != nil {
 		return nil, fmt.Errorf("getting folder: %w", err)
 	}
 
 	// Collect all non-folder items recursively
-	items := collectItems(folder.ItemList)
+	items := collectItems(folderItems)
 
 	stats := &ExecutionStats{
 		XTCStats:            make(map[string]*XTCStats),
