@@ -9,12 +9,17 @@ import (
 
 // resolveFolderItems returns the child items of a folder.
 //
-// It first tries GET /item/{folder} (svc.Items.GetFolder). Some Matrix
-// instances return that folder as "partial" with an empty itemList, which
-// leaves xtc upload/stats unable to find any XTCs ("no XTCs found in folder").
+// It first tries GET /item/{folder} (svc.Items.GetFolder). Matrix only expands
+// children for a category-root folder there; every *nested* folder is returned
+// as a "partial" stub with an empty itemList (non-recursive, lazy tree loading).
+// Since xtc upload/stats target a nested folder (e.g. F-XTC-123), that call
+// yields no XTCs and the operation fails with "no XTCs found in folder".
+//
 // When the itemList is empty, it falls back to the category tree
-// (GET /cat/{category}, svc.Categories.Get) and locates the folder's subtree
-// there, which is returned fully populated.
+// (GET /cat/{category}, svc.Categories.Get) — the authoritative source that
+// returns the full recursive tree — and locates the folder's subtree within it.
+// The fast path is kept because it is a single small request when the target is
+// a category root, and it stays correct on instances where /item does expand.
 func resolveFolderItems(svc *service.MatrixService, project, folderRef string) ([]api.TrimFolder, error) {
 	folder, err := svc.Items.GetFolder(project, folderRef, false)
 	if err != nil {
