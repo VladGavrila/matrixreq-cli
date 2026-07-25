@@ -260,6 +260,16 @@ type yamlStep struct {
 	Action          string `yaml:"action"`
 	Expected        string `yaml:"expected"`
 	RequirementLink string `yaml:"RequirementLink"`
+	// Ref is the xtc_config column id used by some projects (e.g. CUJO) for the
+	// "Requirement/Tspec Link" step column. Accepted as an alias of RequirementLink.
+	Ref string `yaml:"Ref"`
+}
+
+func (s yamlStep) requirementLink() string {
+	if s.Ref != "" {
+		return s.Ref
+	}
+	return s.RequirementLink
 }
 
 // parseYAMLDocstring parses YAML content (without --- markers) into an ItemDef.
@@ -316,26 +326,31 @@ func parseYAMLDocstring(yamlContent string) (*ItemDef, error) {
 	}, nil
 }
 
-// stepJSON is the JSON structure for a test step (matches Matrix API format).
-type stepJSON struct {
-	Action          string `json:"action"`
-	Expected        string `json:"expected"`
-	RequirementLink string `json:"RequirementLink"`
-}
-
 // stepsToJSON serializes YAML steps to the compact JSON format used by Matrix.
+//
+// When a requirement link is present it is written under both keys:
+//   - "Ref" — column field id from xtc_config (required for the CUJO UI)
+//   - "RequirementLink" — historical/default key used by templates and by
+//     mxreq execution matching
+//
+// Omitting "Ref" leaves the Matrix "Requirement/Tspec Link" column empty even
+// when RequirementLink is set.
 func stepsToJSON(steps []yamlStep) (string, error) {
-	var jsonSteps []stepJSON
+	var jsonSteps []map[string]string
 	for _, s := range steps {
 		expected := s.Expected
 		if expected == "" {
 			expected = "N/A"
 		}
-		jsonSteps = append(jsonSteps, stepJSON{
-			Action:          s.Action,
-			Expected:        expected,
-			RequirementLink: s.RequirementLink,
-		})
+		step := map[string]string{
+			"action":   s.Action,
+			"expected": expected,
+		}
+		if link := s.requirementLink(); link != "" {
+			step["Ref"] = link
+			step["RequirementLink"] = link
+		}
+		jsonSteps = append(jsonSteps, step)
 	}
 	data, err := json.Marshal(jsonSteps)
 	if err != nil {
@@ -431,7 +446,12 @@ type yamlItemDef struct {
 	Fields  map[string]string `yaml:"fields"`
 	Labels  []string          `yaml:"labels"`
 	UpLinks string            `yaml:"up_links"`
-	Steps   []yamlStep        `yaml:"steps"`
+	// Legacy flat format fields (TC-specific, converted to Fields map).
+	// Same keys as yamlDocstring — definition files and embedded docstrings
+	// must accept identical shapes.
+	Description string     `yaml:"description"`
+	Assumptions string     `yaml:"assumptions"`
+	Steps       []yamlStep `yaml:"steps"`
 }
 
 // ParseYAMLDefinitions parses a .yaml file containing item definitions.
@@ -457,6 +477,17 @@ func ParseYAMLDefinitionsFromString(content string) ([]ItemDef, error) {
 			fields = make(map[string]string)
 		}
 
+		// Handle legacy flat format: description, assumptions, steps at top level
+		if def.Description != "" {
+			if _, ok := fields["Description"]; !ok {
+				fields["Description"] = strings.TrimSpace(def.Description)
+			}
+		}
+		if def.Assumptions != "" {
+			if _, ok := fields["Assumptions"]; !ok {
+				fields["Assumptions"] = strings.TrimSpace(def.Assumptions)
+			}
+		}
 		if len(def.Steps) > 0 {
 			if _, ok := fields["Steps"]; !ok {
 				stepsJSON, err := stepsToJSON(def.Steps)

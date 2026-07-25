@@ -1,6 +1,7 @@
 package itemsync
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -465,6 +466,74 @@ func TestParseYAMLDefinitionsFromString(t *testing.T) {
 	}
 }
 
+func TestParseYAMLDefinitionsLegacyFlatFields(t *testing.T) {
+	// ElementOS / mxreq sync YAML uses top-level description/assumptions/steps
+	// (same shape as docstring YAML), not nested under fields:.
+	yaml := `items:
+  - title: "Load step page smoke"
+    folder: F-TC-14
+    description: |
+      Verifies the load step page renders.
+    assumptions: |
+      <ul>
+        <li>Instrument is online.</li>
+      </ul>
+    steps:
+      - action: "Open load step page"
+        expected: "Page is visible"
+        RequirementLink: "REQ-1"
+    labels:
+      - Automated
+    up_links: "REQ-1"
+`
+
+	items, err := ParseYAMLDefinitionsFromString(yaml)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(items) != 1 {
+		t.Fatalf("expected 1 item, got %d", len(items))
+	}
+
+	item := items[0]
+	if got := strings.TrimSpace(item.Fields["Description"]); got != "Verifies the load step page renders." {
+		t.Errorf("Description: got %q", item.Fields["Description"])
+	}
+	if !strings.Contains(item.Fields["Assumptions"], "<li>Instrument is online.</li>") {
+		t.Errorf("Assumptions: got %q", item.Fields["Assumptions"])
+	}
+	if !strings.HasPrefix(item.Fields["Steps"], "[") {
+		t.Errorf("Steps should be JSON array, got %q", item.Fields["Steps"])
+	}
+	if !strings.Contains(item.Fields["Steps"], `"RequirementLink":"REQ-1"`) {
+		t.Errorf("Steps JSON missing RequirementLink: %q", item.Fields["Steps"])
+	}
+	if !strings.Contains(item.Fields["Steps"], `"Ref":"REQ-1"`) {
+		t.Errorf("Steps JSON missing Ref (xtc_config link column): %q", item.Fields["Steps"])
+	}
+
+	// Explicit fields: map wins over legacy top-level keys
+	yamlOverride := `items:
+  - title: "Override"
+    folder: F-TC-14
+    description: "ignored legacy"
+    assumptions: "ignored legacy"
+    fields:
+      Description: "<p>from fields</p>"
+      Assumptions: "<ul><li>from fields</li></ul>"
+`
+	items, err = ParseYAMLDefinitionsFromString(yamlOverride)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if items[0].Fields["Description"] != "<p>from fields</p>" {
+		t.Errorf("fields map should win for Description, got %q", items[0].Fields["Description"])
+	}
+	if items[0].Fields["Assumptions"] != "<ul><li>from fields</li></ul>" {
+		t.Errorf("fields map should win for Assumptions, got %q", items[0].Fields["Assumptions"])
+	}
+}
+
 func TestParseYAMLDefinitionsFile(t *testing.T) {
 	content := `items:
   - title: "Test item"
@@ -731,9 +800,48 @@ labels:
 		t.Error("expected Steps (as JSON) in Fields map from legacy format")
 	}
 
-	// Steps should be JSON
+	// Steps should be JSON with both link keys (UI uses Ref; tooling uses RequirementLink)
 	stepsJSON := item.Fields["Steps"]
 	if !strings.Contains(stepsJSON, `"RequirementLink":"SOFT-1"`) {
 		t.Errorf("Steps JSON should contain RequirementLink, got: %s", stepsJSON)
+	}
+	if !strings.Contains(stepsJSON, `"Ref":"SOFT-1"`) {
+		t.Errorf("Steps JSON should contain Ref, got: %s", stepsJSON)
+	}
+}
+
+func TestStepsToJSONWritesRefAndRequirementLink(t *testing.T) {
+	got, err := stepsToJSON([]yamlStep{
+		{Action: "Open page", Expected: ""},
+		{Action: "Verify", Expected: "ok", RequirementLink: "SOFT-1"},
+		{Action: "Verify via Ref", Expected: "ok", Ref: "SOFT-2"},
+	})
+	if err != nil {
+		t.Fatalf("stepsToJSON: %v", err)
+	}
+
+	var steps []map[string]string
+	if err := json.Unmarshal([]byte(got), &steps); err != nil {
+		t.Fatalf("unmarshal steps JSON: %v\nraw: %s", err, got)
+	}
+	if len(steps) != 3 {
+		t.Fatalf("expected 3 steps, got %d", len(steps))
+	}
+
+	if _, ok := steps[0]["Ref"]; ok {
+		t.Errorf("step without link should omit Ref, got: %#v", steps[0])
+	}
+	if _, ok := steps[0]["RequirementLink"]; ok {
+		t.Errorf("step without link should omit RequirementLink, got: %#v", steps[0])
+	}
+	if steps[0]["expected"] != "N/A" {
+		t.Errorf("empty expected should default to N/A, got %q", steps[0]["expected"])
+	}
+
+	if steps[1]["Ref"] != "SOFT-1" || steps[1]["RequirementLink"] != "SOFT-1" {
+		t.Errorf("RequirementLink input should emit both keys, got: %#v", steps[1])
+	}
+	if steps[2]["Ref"] != "SOFT-2" || steps[2]["RequirementLink"] != "SOFT-2" {
+		t.Errorf("Ref input should emit both keys, got: %#v", steps[2])
 	}
 }
