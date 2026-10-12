@@ -142,3 +142,78 @@ func TestClearResultsKeepsUnmodeledKeys(t *testing.T) {
 		}
 	}
 }
+
+// encoding/json fills a typed field from a key of any letter case, so the
+// unmodeled-key stash has to strip with the same rule. Otherwise the value is
+// written back under both spellings.
+func TestTestStepCaseVariantKeyIsNotDuplicated(t *testing.T) {
+	const raw = `{"action":"a","requirementlink":"SOFT-5","projectColumn":"keep"}`
+
+	var step TestStep
+	if err := json.Unmarshal([]byte(raw), &step); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if step.RequirementLink != "SOFT-5" {
+		t.Fatalf("typed field not filled: %q", step.RequirementLink)
+	}
+	if _, dup := step.extra["requirementlink"]; dup {
+		t.Errorf("case-variant key left in extra: %v", step.extra)
+	}
+
+	out, err := json.Marshal(step)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var got map[string]any
+	if err := json.Unmarshal(out, &got); err != nil {
+		t.Fatalf("re-unmarshal: %v", err)
+	}
+	if got["RequirementLink"] != "SOFT-5" {
+		t.Errorf("RequirementLink lost: %v", got)
+	}
+	if _, dup := got["requirementlink"]; dup {
+		t.Errorf("value written back twice: %s", out)
+	}
+	if got["projectColumn"] != "keep" {
+		t.Errorf("unmodeled column dropped: %v", got)
+	}
+}
+
+// A step stored with RequirementLink explicitly "" must round-trip that key; a
+// step that never had it must still gain none.
+func TestTestStepKeepsExplicitEmptyRequirementLink(t *testing.T) {
+	tests := []struct {
+		name    string
+		raw     string
+		wantKey bool
+	}{
+		{"explicit empty", `{"action":"a","RequirementLink":""}`, true},
+		{"explicit empty, other case", `{"action":"a","requirementlink":""}`, true},
+		{"absent", `{"action":"a"}`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var step TestStep
+			if err := json.Unmarshal([]byte(tt.raw), &step); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			// Survive the upload path, which copies steps via ClearResults.
+			out, err := json.Marshal(ClearResults([]TestStep{step})[0])
+			if err != nil {
+				t.Fatalf("marshal: %v", err)
+			}
+			var got map[string]any
+			_ = json.Unmarshal(out, &got)
+			v, has := got["RequirementLink"]
+			if has != tt.wantKey {
+				t.Fatalf("RequirementLink present=%v, want %v: %s", has, tt.wantKey, out)
+			}
+			if has && v != "" {
+				t.Errorf("RequirementLink = %v, want empty", v)
+			}
+			if _, dup := got["requirementlink"]; dup {
+				t.Errorf("case variant written back: %s", out)
+			}
+		})
+	}
+}

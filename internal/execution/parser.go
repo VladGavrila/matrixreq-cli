@@ -75,12 +75,15 @@ func ValidateResults(results *ExecutionResults) error {
 			return fmt.Errorf("result %d (%s): steps list is empty", i, result.TestName)
 		}
 		for j, step := range result.Steps {
-			if step.Actual == "" {
-				return fmt.Errorf("result %d (%s) step %d: missing actual", i, result.TestName, j)
-			}
 			stepStatus := strings.ToUpper(step.Status)
 			if stepStatus != "PASS" && stepStatus != "FAIL" {
 				return fmt.Errorf("result %d (%s) step %d: status must be PASS or FAIL, got %q", i, result.TestName, j, step.Status)
+			}
+			// A passing step may have nothing to report: an action step has no
+			// outcome of its own. A failing one must say what went wrong, since
+			// that text is the only explanation Matrix will hold for it.
+			if stepStatus == "FAIL" && step.Actual == "" {
+				return fmt.Errorf("result %d (%s) step %d: a FAIL step needs an actual describing the failure", i, result.TestName, j)
 			}
 		}
 	}

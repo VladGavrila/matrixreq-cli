@@ -53,6 +53,11 @@ type TestStep struct {
 	// extra holds every key above that this struct does not model, exactly as
 	// Matrix sent it.
 	extra map[string]json.RawMessage
+
+	// emptyLink records that Matrix sent RequirementLink explicitly as "".
+	// omitempty would otherwise drop the key on the way back, so MarshalJSON
+	// restores it. A step that never had the key still gains none.
+	emptyLink bool
 }
 
 // modeledStepKeys are the JSON keys TestStep itself round-trips. Derived from
@@ -83,8 +88,20 @@ func (s *TestStep) UnmarshalJSON(data []byte) error {
 	if err := json.Unmarshal(data, &all); err != nil {
 		return err
 	}
+
+	// encoding/json fills a typed field from a key of any letter case, but the
+	// raw map is case-sensitive. Strip with the same rule the decoder used, or
+	// a key such as "requirementlink" would sit in extra as well as in the typed
+	// field and be written back twice.
+	modeled.emptyLink = false
 	for key := range modeledStepKeys {
-		delete(all, key)
+		consumed := consumedKeys(all, key)
+		if key == "RequirementLink" && len(consumed) > 0 && modeled.RequirementLink == "" {
+			modeled.emptyLink = true
+		}
+		for _, k := range consumed {
+			delete(all, k)
+		}
 	}
 	if len(all) > 0 {
 		modeled.extra = all
@@ -93,12 +110,26 @@ func (s *TestStep) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+// consumedKeys returns every key of raw that encoding/json matched to the typed
+// field tagged key: the exact key and any key differing only by letter case. If
+// several spellings are present they all decode into the one field, so all of
+// them are consumed.
+func consumedKeys(raw map[string]json.RawMessage, key string) []string {
+	var out []string
+	for k := range raw {
+		if strings.EqualFold(k, key) {
+			out = append(out, k)
+		}
+	}
+	return out
+}
+
 func (s TestStep) MarshalJSON() ([]byte, error) {
 	data, err := json.Marshal(stepAlias(s))
 	if err != nil {
 		return nil, err
 	}
-	if len(s.extra) == 0 {
+	if len(s.extra) == 0 && !(s.emptyLink && s.RequirementLink == "") {
 		return data, nil
 	}
 	var merged map[string]json.RawMessage
@@ -110,14 +141,29 @@ func (s TestStep) MarshalJSON() ([]byte, error) {
 			merged[key] = value
 		}
 	}
+	if s.emptyLink && s.RequirementLink == "" {
+		merged["RequirementLink"] = json.RawMessage(`""`)
+	}
 	return json.Marshal(merged)
 }
 
 // UploadResult holds the outcome of an execution results upload.
+//
+// Every test in the results file ends up in exactly one place: Successes
+// (written), Skipped (refused as out of sync), Failed (could not be read or
+// written), or Missing (no XTC in the folder). --strict fails on all but the
+// first.
 type UploadResult struct {
 	Successes map[string]bool   // XTC ref → success
 	Skipped   map[string]string // XTC ref → why nothing was written to it
-	Issues    []string          // TC names with step mismatches
+	Failed    map[string]string // XTC ref → error reading or updating it
+	Missing   []string          // test names with no XTC in the folder
+	Issues    []string          // operator-facing messages for all of the above
+}
+
+// Unrecorded counts the results that did not make it into Matrix.
+func (u *UploadResult) Unrecorded() int {
+	return len(u.Skipped) + len(u.Failed) + len(u.Missing)
 }
 
 // StepMatch is the outcome of matching one test's step results against the

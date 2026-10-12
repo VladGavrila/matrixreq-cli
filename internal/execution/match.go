@@ -92,7 +92,8 @@ func MatchSteps(tcName, xtcRef string, local []ExecutionResultStep, upstream []T
 					tcName, i+1, describeRequirement(lr.Requirement),
 					describeRequirement(steps[i].RequirementLink), xtcRef, xtcRef),
 			)
-			continue
+			// No continue: the status is checked even on a drifted step, so a
+			// run with both problems reports both.
 		}
 
 		switch lr.Status {

@@ -66,16 +66,27 @@ step-level pass/fail status matched by requirement links.`,
 	},
 }
 
-// strictUploadError turns refused XTCs into a failure when --strict is set, so
-// CI and scripts notice a skipped XTC from the exit code alone. The summary or
-// JSON has already been printed by the time this runs. Without --strict an
-// out-of-sync XTC is reported but does not fail the command.
+// strictUploadError turns any result that did not reach Matrix into a failure
+// when --strict is set, so CI and scripts notice from the exit code alone. That
+// covers XTCs refused as out of sync, XTCs that could not be read or updated,
+// and tests with no XTC in the folder. The summary or JSON has already been
+// printed by the time this runs. Without --strict none of these change the exit
+// code.
 func strictUploadError(uploadResult *execution.UploadResult, strict bool) error {
-	if !strict || len(uploadResult.Skipped) == 0 {
+	if !strict || uploadResult.Unrecorded() == 0 {
 		return nil
 	}
-	return fmt.Errorf("%d XTC(s) out of sync and left untouched: %s",
-		len(uploadResult.Skipped), strings.Join(sortedKeys(uploadResult.Skipped), ", "))
+	var parts []string
+	if n := len(uploadResult.Skipped); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d out of sync (%s)", n, strings.Join(sortedKeys(uploadResult.Skipped), ", ")))
+	}
+	if n := len(uploadResult.Failed); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed (%s)", n, strings.Join(sortedKeys(uploadResult.Failed), ", ")))
+	}
+	if n := len(uploadResult.Missing); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d not found in folder (%s)", n, strings.Join(uploadResult.Missing, ", ")))
+	}
+	return fmt.Errorf("%d result(s) not recorded: %s", uploadResult.Unrecorded(), strings.Join(parts, "; "))
 }
 
 // sortedKeys returns a map's keys in order, so output is stable run to run.
@@ -112,9 +123,21 @@ func printUploadSummary(uploadResult *execution.UploadResult) {
 	}
 
 	fmt.Printf("\nUploaded %d/%d XTCs successfully", successCount, len(uploadResult.Successes))
+	var notes []string
 	if len(uploadResult.Skipped) > 0 {
-		fmt.Printf(" (%d out of sync, left untouched, manual review needed: %s)",
-			len(uploadResult.Skipped), strings.Join(sortedKeys(uploadResult.Skipped), ", "))
+		notes = append(notes, fmt.Sprintf("%d out of sync, left untouched, manual review needed: %s",
+			len(uploadResult.Skipped), strings.Join(sortedKeys(uploadResult.Skipped), ", ")))
+	}
+	if len(uploadResult.Failed) > 0 {
+		notes = append(notes, fmt.Sprintf("%d failed: %s",
+			len(uploadResult.Failed), strings.Join(sortedKeys(uploadResult.Failed), ", ")))
+	}
+	if len(uploadResult.Missing) > 0 {
+		notes = append(notes, fmt.Sprintf("%d test(s) not found in folder: %s",
+			len(uploadResult.Missing), strings.Join(uploadResult.Missing, ", ")))
+	}
+	if len(notes) > 0 {
+		fmt.Printf(" (%s)", strings.Join(notes, "; "))
 	}
 	fmt.Println()
 }
@@ -427,7 +450,7 @@ func init() {
 
 	xtcUploadCmd.Flags().StringP("folder", "f", "", "Target XTC folder (e.g., F-XTC-123)")
 	_ = xtcUploadCmd.MarkFlagRequired("folder")
-	xtcUploadCmd.Flags().Bool("strict", false, "Exit non-zero when any XTC is out of sync and left untouched")
+	xtcUploadCmd.Flags().Bool("strict", false, "Exit non-zero when any result is not recorded (out of sync, failed, or test not found)")
 
 	xtcStatsCmd.Flags().StringP("folder", "f", "", "Target XTC folder (e.g., F-XTC-123)")
 	_ = xtcStatsCmd.MarkFlagRequired("folder")
@@ -450,7 +473,7 @@ func init() {
 	xtcExecuteCmd.Flags().StringP("reason", "r", "", "Reason")
 	xtcExecuteCmd.Flags().StringArray("map", nil, "Field mapping: Category.Label=Category.Label (repeatable)")
 	xtcExecuteCmd.Flags().StringArray("preset", nil, "XTC field preset: Category.Label=Value (repeatable)")
-	xtcExecuteCmd.Flags().Bool("strict", false, "Exit non-zero when any XTC is out of sync and left untouched")
+	xtcExecuteCmd.Flags().Bool("strict", false, "Exit non-zero when any result is not recorded (out of sync, failed, or test not found)")
 	xtcExecuteCmd.Flags().Bool("dry-run", false, "Print resolved ExecuteRequest as JSON and exit (skips upload)")
 	_ = xtcExecuteCmd.MarkFlagRequired("reason")
 	xtcExecuteCmd.MarkFlagsMutuallyExclusive("folder", "input")

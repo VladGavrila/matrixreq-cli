@@ -326,3 +326,23 @@ func TestGroupByTestCollapsesAndCountsEntries(t *testing.T) {
 		t.Errorf("TC-38 steps: got %d, want 2", len(grouped[0].steps))
 	}
 }
+
+// A requirement mismatch must not hide a bad status on the same step: the
+// operator should see every problem in one run.
+func TestMatchStepsReportsBadStatusOnDriftedStep(t *testing.T) {
+	upstream := []TestStep{reqStep("SOFT-5"), reqStep("SOFT-6")}
+	local := []ExecutionResultStep{
+		{Requirement: "SOFT-9", Actual: "a", Status: "BLOCKED"}, // drifted AND bad status
+		pass("SOFT-6", "b"),
+	}
+
+	m := MatchSteps("TC-38", "XTC-1", local, upstream)
+
+	if !m.OutOfSync {
+		t.Fatal("expected out of sync")
+	}
+	if len(m.Issues) != 2 {
+		t.Fatalf("want requirement drift and bad status both reported, got %d: %v", len(m.Issues), m.Issues)
+	}
+	assertNothingToWrite(t, m)
+}

@@ -52,12 +52,15 @@ func UploadResults(svc *service.MatrixService, project string, folderRef string,
 	uploadResult := &UploadResult{
 		Successes: make(map[string]bool),
 		Skipped:   make(map[string]string),
+		Failed:    make(map[string]string),
+		Missing:   []string{},
 	}
 
 	for _, local := range groupByTest(results.Results) {
 		tcName := local.testName
 		xtcFolder, ok := tcToXTC[tcName]
 		if !ok {
+			uploadResult.Missing = append(uploadResult.Missing, tcName)
 			uploadResult.Issues = append(uploadResult.Issues, fmt.Sprintf("test %q not found in folder", tcName))
 			continue
 		}
@@ -65,7 +68,7 @@ func UploadResults(svc *service.MatrixService, project string, folderRef string,
 
 		item, err := svc.Items.Get(project, xtcRef, false)
 		if err != nil {
-			uploadResult.Issues = append(uploadResult.Issues, fmt.Sprintf("failed to get %s: %v", xtcRef, err))
+			uploadResult.fail(xtcRef, fmt.Sprintf("failed to get %s: %v", xtcRef, err), err)
 			continue
 		}
 
@@ -88,11 +91,11 @@ func UploadResults(svc *service.MatrixService, project string, folderRef string,
 		}
 
 		err = updateXTCResults(svc, project, fm, xtcRef, match.Steps, item, match.RunResult, results)
-		uploadResult.Successes[xtcRef] = err == nil
 		if err != nil {
-			uploadResult.Issues = append(uploadResult.Issues,
-				fmt.Sprintf("failed to update %s: %v", xtcRef, err))
+			uploadResult.fail(xtcRef, fmt.Sprintf("failed to update %s: %v", xtcRef, err), err)
+			continue
 		}
+		uploadResult.Successes[xtcRef] = true
 	}
 
 	return uploadResult, nil
@@ -123,6 +126,14 @@ func groupByTest(results []ExecutionResultTest) []*localTest {
 		lt.steps = append(lt.steps, r.Steps...)
 	}
 	return order
+}
+
+// fail records an XTC that could not be read or written, as opposed to one that
+// was deliberately left alone.
+func (u *UploadResult) fail(xtcRef, issue string, err error) {
+	u.Successes[xtcRef] = false
+	u.Failed[xtcRef] = err.Error()
+	u.Issues = append(u.Issues, issue)
 }
 
 // skip records that an XTC was deliberately left untouched.
