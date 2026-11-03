@@ -30,8 +30,10 @@ CGO_ENABLED=0 GOOS=darwin  GOARCH=arm64 go build -ldflags "-s -w -X github.com/V
 
 echo "==> Signing macOS binary..."
 MACOS_BIN="$DIST_DIR/${BINARY}-macos-arm64"
+RELEASE_BUILD=false
 
 if [[ -n "${DEVELOPER_ID_CERT_BASE64:-}" ]]; then
+    RELEASE_BUILD=true
     KEYCHAIN_PATH="$TMPDIR/mxreq-build.keychain"
     KEYCHAIN_PASSWORD="$(uuidgen)"
 
@@ -65,6 +67,7 @@ cd "$DIST_DIR"
 zip "${BINARY}-macos-arm64.zip" "${BINARY}-macos-arm64"
 
 if [[ -n "${NOTARIZE_APPLE_ID:-}" ]]; then
+    RELEASE_BUILD=true
     echo "==> Notarizing macOS binary..."
     xcrun notarytool submit "${BINARY}-macos-arm64.zip" \
         --apple-id "$NOTARIZE_APPLE_ID" \
@@ -78,3 +81,12 @@ fi
 
 echo "==> Done:"
 echo "    $DIST_DIR/${BINARY}-macos-arm64.zip"
+if [[ "$RELEASE_BUILD" == true ]]; then
+    echo
+    echo "==> Next steps:"
+    echo "    1. Publish the GitHub release WITHOUT attaching the signed zip."
+    echo "       Attaching a file in the web UI creates the release as a draft first,"
+    echo "       which does not trigger the Release GitHub Action."
+    echo "    2. Wait for the Release GitHub Action to finish."
+    echo "    3. Edit the published release and attach ${BINARY}-macos-arm64.zip."
+fi
