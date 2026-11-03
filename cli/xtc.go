@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/VladGavrila/matrixreq-cli/internal/api"
@@ -52,30 +53,93 @@ step-level pass/fail status matched by requirement links.`,
 			return err
 		}
 
+		strict, _ := cmd.Flags().GetBool("strict")
+
 		if getOutputFormat() == "json" {
-			return output.PrintItem(getOutputFormat(), uploadResult)
-		}
-
-		// Print summary
-		successCount := 0
-		for ref, ok := range uploadResult.Successes {
-			if ok {
-				successCount++
-				fmt.Printf("  Updated %s\n", ref)
+			if err := output.PrintItem(getOutputFormat(), uploadResult); err != nil {
+				return err
 			}
+		} else {
+			printUploadSummary(uploadResult)
 		}
-
-		if len(uploadResult.Issues) > 0 {
-			fmt.Println("Issues:")
-			for _, issue := range uploadResult.Issues {
-				fmt.Printf("  %s\n", issue)
-			}
-		}
-
-		fmt.Printf("\nUploaded %d/%d XTCs successfully\n", successCount, len(uploadResult.Successes))
-
-		return nil
+		return strictUploadError(uploadResult, strict)
 	},
+}
+
+// strictUploadError turns any result that did not reach Matrix into a failure
+// when --strict is set, so CI and scripts notice from the exit code alone. That
+// covers XTCs refused as out of sync, XTCs that could not be read or updated,
+// and tests with no XTC in the folder. The summary or JSON has already been
+// printed by the time this runs. Without --strict none of these change the exit
+// code.
+func strictUploadError(uploadResult *execution.UploadResult, strict bool) error {
+	if !strict || uploadResult.Unrecorded() == 0 {
+		return nil
+	}
+	var parts []string
+	if n := len(uploadResult.Skipped); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d out of sync (%s)", n, strings.Join(sortedKeys(uploadResult.Skipped), ", ")))
+	}
+	if n := len(uploadResult.Failed); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d failed (%s)", n, strings.Join(sortedKeys(uploadResult.Failed), ", ")))
+	}
+	if n := len(uploadResult.Missing); n > 0 {
+		parts = append(parts, fmt.Sprintf("%d not found in folder (%s)", n, strings.Join(uploadResult.Missing, ", ")))
+	}
+	return fmt.Errorf("%d result(s) not recorded: %s", uploadResult.Unrecorded(), strings.Join(parts, "; "))
+}
+
+// sortedKeys returns a map's keys in order, so output is stable run to run.
+func sortedKeys[V any](m map[string]V) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// printUploadSummary reports what an upload wrote, what it refused, and why.
+// A refused XTC is called out separately from a failed one: nothing was sent,
+// so Matrix still holds whatever it held before.
+//
+// Every refusal already has an operator-facing message in Issues, naming the
+// XTC and what drifted, so it is not repeated as its own block; the count at the
+// end is what marks the XTCs as refused. Refs are sorted for stable output.
+func printUploadSummary(uploadResult *execution.UploadResult) {
+	successCount := 0
+	for _, ref := range sortedKeys(uploadResult.Successes) {
+		if uploadResult.Successes[ref] {
+			successCount++
+			fmt.Printf("  Updated %s\n", ref)
+		}
+	}
+
+	if len(uploadResult.Issues) > 0 {
+		fmt.Println("Issues:")
+		for _, issue := range uploadResult.Issues {
+			fmt.Printf("  %s\n", issue)
+		}
+	}
+
+	fmt.Printf("\nUploaded %d/%d XTCs successfully", successCount, len(uploadResult.Successes))
+	var notes []string
+	if len(uploadResult.Skipped) > 0 {
+		notes = append(notes, fmt.Sprintf("%d out of sync, left untouched, manual review needed: %s",
+			len(uploadResult.Skipped), strings.Join(sortedKeys(uploadResult.Skipped), ", ")))
+	}
+	if len(uploadResult.Failed) > 0 {
+		notes = append(notes, fmt.Sprintf("%d failed: %s",
+			len(uploadResult.Failed), strings.Join(sortedKeys(uploadResult.Failed), ", ")))
+	}
+	if len(uploadResult.Missing) > 0 {
+		notes = append(notes, fmt.Sprintf("%d test(s) not found in folder: %s",
+			len(uploadResult.Missing), strings.Join(uploadResult.Missing, ", ")))
+	}
+	if len(notes) > 0 {
+		fmt.Printf(" (%s)", strings.Join(notes, "; "))
+	}
+	fmt.Println()
 }
 
 var xtcStatsCmd = &cobra.Command{
@@ -335,21 +399,9 @@ var xtcExecuteCmd = &cobra.Command{
 			return fmt.Errorf("uploading results: %w", err)
 		}
 
-		successCount := 0
-		for ref, ok := range uploadResult.Successes {
-			if ok {
-				successCount++
-				fmt.Printf("  Updated %s\n", ref)
-			}
-		}
-		if len(uploadResult.Issues) > 0 {
-			fmt.Println("Issues:")
-			for _, issue := range uploadResult.Issues {
-				fmt.Printf("  %s\n", issue)
-			}
-		}
-		fmt.Printf("\nUploaded %d/%d XTCs successfully\n", successCount, len(uploadResult.Successes))
-		return nil
+		strict, _ := cmd.Flags().GetBool("strict")
+		printUploadSummary(uploadResult)
+		return strictUploadError(uploadResult, strict)
 	},
 }
 
@@ -398,6 +450,7 @@ func init() {
 
 	xtcUploadCmd.Flags().StringP("folder", "f", "", "Target XTC folder (e.g., F-XTC-123)")
 	_ = xtcUploadCmd.MarkFlagRequired("folder")
+	xtcUploadCmd.Flags().Bool("strict", false, "Exit non-zero when any result is not recorded (out of sync, failed, or test not found)")
 
 	xtcStatsCmd.Flags().StringP("folder", "f", "", "Target XTC folder (e.g., F-XTC-123)")
 	_ = xtcStatsCmd.MarkFlagRequired("folder")
@@ -420,6 +473,7 @@ func init() {
 	xtcExecuteCmd.Flags().StringP("reason", "r", "", "Reason")
 	xtcExecuteCmd.Flags().StringArray("map", nil, "Field mapping: Category.Label=Category.Label (repeatable)")
 	xtcExecuteCmd.Flags().StringArray("preset", nil, "XTC field preset: Category.Label=Value (repeatable)")
+	xtcExecuteCmd.Flags().Bool("strict", false, "Exit non-zero when any result is not recorded (out of sync, failed, or test not found)")
 	xtcExecuteCmd.Flags().Bool("dry-run", false, "Print resolved ExecuteRequest as JSON and exit (skips upload)")
 	_ = xtcExecuteCmd.MarkFlagRequired("reason")
 	xtcExecuteCmd.MarkFlagsMutuallyExclusive("folder", "input")

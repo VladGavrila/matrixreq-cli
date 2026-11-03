@@ -3,6 +3,7 @@ package execution
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/VladGavrila/matrixreq-cli/internal/api"
@@ -50,115 +51,130 @@ func UploadResults(svc *service.MatrixService, project string, folderRef string,
 
 	uploadResult := &UploadResult{
 		Successes: make(map[string]bool),
+		Skipped:   make(map[string]string),
+		Failed:    make(map[string]string),
+		Missing:   []string{},
 	}
 
-	// Load XTC data for each test result
-	type xtcData struct {
-		ref   string
-		steps []TestStep
-		item  *api.TrimItem
-	}
-	updatedXTCs := make(map[string]*xtcData)
-
-	for _, testResult := range results.Results {
-		tcName := testResult.TestName
+	for _, local := range groupByTest(results.Results) {
+		tcName := local.testName
 		xtcFolder, ok := tcToXTC[tcName]
 		if !ok {
+			uploadResult.Missing = append(uploadResult.Missing, tcName)
 			uploadResult.Issues = append(uploadResult.Issues, fmt.Sprintf("test %q not found in folder", tcName))
 			continue
 		}
-
 		xtcRef := xtcFolder.ItemRef
 
-		// Get full XTC item if not already loaded
-		if _, loaded := updatedXTCs[tcName]; !loaded {
-			item, err := svc.Items.Get(project, xtcRef, false)
-			if err != nil {
-				uploadResult.Issues = append(uploadResult.Issues, fmt.Sprintf("failed to get %s: %v", xtcRef, err))
-				continue
-			}
-
-			// Parse steps from field values
-			steps := parseStepsFromItem(item, fm)
-
-			// Clear previous results
-			for i := range steps {
-				steps[i].Result = ""
-				steps[i].Human = ""
-				steps[i].Render = ""
-				steps[i].Comment = ""
-			}
-
-			updatedXTCs[tcName] = &xtcData{
-				ref:   xtcRef,
-				steps: steps,
-				item:  item,
-			}
-		}
-
-		xtc := updatedXTCs[tcName]
-
-		// Match step results to XTC steps by requirement
-		for _, stepResult := range testResult.Steps {
-			if stepResult.Requirement == "" {
-				continue
-			}
-
-			stepFound := false
-			for i := range xtc.steps {
-				if xtc.steps[i].RequirementLink == stepResult.Requirement && xtc.steps[i].Human == "" {
-					if stepResult.Status == "PASS" {
-						xtc.steps[i].Result = "p"
-						xtc.steps[i].Human = "passed"
-						xtc.steps[i].Render = "ok"
-					} else {
-						xtc.steps[i].Result = "f"
-						xtc.steps[i].Human = "failed"
-						xtc.steps[i].Render = "error"
-					}
-					xtc.steps[i].Comment = stepResult.Actual
-					stepFound = true
-					break
-				}
-			}
-
-			if !stepFound {
-				uploadResult.Issues = append(uploadResult.Issues,
-					fmt.Sprintf("%s: requirement %s not found in XTC steps", tcName, stepResult.Requirement))
-			}
-		}
-	}
-
-	// Upload results for each XTC
-	for tcName, xtc := range updatedXTCs {
-		// Check for incomplete executions
-		hasIssue := false
-		runResult := "p"
-		for _, step := range xtc.steps {
-			if step.RequirementLink != "" && step.Result == "" {
-				hasIssue = true
-				uploadResult.Issues = append(uploadResult.Issues,
-					fmt.Sprintf("%s: step with requirement %s was not executed", tcName, step.RequirementLink))
-				break
-			}
-			if step.Result == "f" {
-				runResult = "f"
-			}
-		}
-		if hasIssue {
+		item, err := svc.Items.Get(project, xtcRef, false)
+		if err != nil {
+			uploadResult.fail(xtcRef, fmt.Sprintf("failed to get %s: %v", xtcRef, err), err)
 			continue
 		}
 
-		// Upload
-		err := updateXTCResults(svc, project, fm, xtc.ref, xtc.steps, xtc.item, runResult, results)
-		uploadResult.Successes[xtc.ref] = err == nil
-		if err != nil {
-			uploadResult.Issues = append(uploadResult.Issues,
-				fmt.Sprintf("failed to update %s: %v", xtc.ref, err))
+		// Two results for one XTC cannot both be the execution it records, and
+		// their concatenated steps would misreport as a count mismatch.
+		if local.entries > 1 {
+			uploadResult.skip(xtcRef, fmt.Sprintf("%d results claim this XTC", local.entries), fmt.Sprintf(
+				"%s: OUT OF SYNC — %d results in this run execute %s. No results were "+
+					"uploaded; review %s manually.",
+				tcName, local.entries, xtcRef, xtcRef))
+			continue
 		}
+
+		match := MatchSteps(tcName, xtcRef, local.steps, parseStepsFromItem(item, fm))
+		uploadResult.Issues = append(uploadResult.Issues, match.Issues...)
+		if match.OutOfSync {
+			uploadResult.Successes[xtcRef] = false
+			uploadResult.Skipped[xtcRef] = match.Reason
+			continue
+		}
+
+		err = updateXTCResults(svc, project, fm, xtcRef, match.Steps, item, match.RunResult, results)
+		if err != nil {
+			uploadResult.fail(xtcRef, fmt.Sprintf("failed to update %s: %v", xtcRef, err), err)
+			continue
+		}
+		uploadResult.Successes[xtcRef] = true
 	}
 
 	return uploadResult, nil
+}
+
+// localTest is every step result a run recorded for one test name.
+type localTest struct {
+	testName string
+	steps    []ExecutionResultStep
+	// entries counts the results carrying this test name; more than one is a
+	// conflict rather than something to merge.
+	entries int
+}
+
+// groupByTest collapses results onto the test they execute, preserving the
+// order they appear in the results file so uploads are deterministic.
+func groupByTest(results []ExecutionResultTest) []*localTest {
+	var order []*localTest
+	byName := make(map[string]*localTest)
+	for _, r := range results {
+		lt, seen := byName[r.TestName]
+		if !seen {
+			lt = &localTest{testName: r.TestName}
+			byName[r.TestName] = lt
+			order = append(order, lt)
+		}
+		lt.entries++
+		lt.steps = append(lt.steps, r.Steps...)
+	}
+	return order
+}
+
+// fail records an XTC that could not be read or written, as opposed to one that
+// was deliberately left alone.
+func (u *UploadResult) fail(xtcRef, issue string, err error) {
+	u.Successes[xtcRef] = false
+	u.Failed[xtcRef] = err.Error()
+	u.Issues = append(u.Issues, issue)
+}
+
+// skip records that an XTC was deliberately left untouched.
+func (u *UploadResult) skip(xtcRef, reason, issue string) {
+	u.Successes[xtcRef] = false
+	u.Skipped[xtcRef] = reason
+	u.Issues = append(u.Issues, issue)
+}
+
+// mergeFieldValues returns every field the item currently holds, with
+// overrides applied on top.
+//
+// An update is a full replacement: ItemService.Update sends one fx<id> form
+// parameter per listed field, and Matrix clears every field the request omits.
+// Sending only the fields an upload sets therefore wipes the rest of the item —
+// Assumptions, Test Setup, Test Materials, Test Purpose, Acceptance Criteria.
+// Field order is sorted by id purely so the request is deterministic.
+func mergeFieldValues(item *api.TrimItem, overrides map[int]string) []api.FieldValSetType {
+	values := make(map[int]string, len(overrides))
+	if item != nil && item.FieldValList != nil {
+		for _, fv := range item.FieldValList.FieldVal {
+			if fv.Value != "" {
+				values[fv.ID] = fv.Value
+			}
+		}
+	}
+	for id, value := range overrides {
+		values[id] = value
+	}
+
+	ids := make([]int, 0, len(values))
+	for id := range values {
+		ids = append(ids, id)
+	}
+	sort.Ints(ids)
+
+	fields := make([]api.FieldValSetType, 0, len(ids))
+	for _, id := range ids {
+		fields = append(fields, api.FieldValSetType{ID: id, Value: values[id]})
+	}
+	return fields
 }
 
 // parseStepsFromItem extracts test steps from an item's field values.
@@ -221,25 +237,25 @@ func updateXTCResults(svc *service.MatrixService, project string, fm *fieldmap.F
 		}
 	}
 
-	fields := []api.FieldValSetType{
-		{ID: testerID, Value: results.Tester},
-		{ID: dateID, Value: testDate},
-		{ID: runResultID, Value: runResult},
-		{ID: stepsID, Value: string(stepsJSON)},
+	overrides := map[int]string{
+		testerID:    results.Tester,
+		dateID:      testDate,
+		runResultID: runResult,
+		stepsID:     string(stepsJSON),
 	}
 
 	// Optionally set version field
 	if results.SUTVersion != "" {
 		versionID, err := fm.Resolve("XTC", "Version")
 		if err == nil {
-			fields = append(fields, api.FieldValSetType{ID: versionID, Value: results.SUTVersion})
+			overrides[versionID] = results.SUTVersion
 		}
 	}
 
 	updateReq := &api.UpdateItemRequest{
 		Title:  item.Title,
 		Reason: "synced by mxreq",
-		Fields: fields,
+		Fields: mergeFieldValues(item, overrides),
 	}
 
 	_, err = svc.Items.Update(project, xtcRef, updateReq)

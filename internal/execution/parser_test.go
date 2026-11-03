@@ -174,21 +174,28 @@ func TestValidateResultsEmptySteps(t *testing.T) {
 	}
 }
 
-func TestValidateResultsMissingActual(t *testing.T) {
-	results := &ExecutionResults{
-		Results: []ExecutionResultTest{
-			{
+func TestValidateResultsBlankActual(t *testing.T) {
+	validate := func(status string) error {
+		return ValidateResults(&ExecutionResults{
+			Results: []ExecutionResultTest{{
 				TestName: "TC-100",
 				Result:   "PASS",
-				Steps: []ExecutionResultStep{
-					{Requirement: "SOFT-1", Actual: "", Status: "PASS"},
-				},
-			},
-		},
+				Steps:    []ExecutionResultStep{{Requirement: "SOFT-1", Actual: "", Status: status}},
+			}},
+		})
 	}
-	err := ValidateResults(results)
-	if err == nil {
-		t.Error("expected error for missing actual")
+
+	// An action step reports nothing when it passes.
+	if err := validate("PASS"); err != nil {
+		t.Errorf("blank actual on a PASS step was rejected: %v", err)
+	}
+	// A failure with no explanation is rejected: nothing would say what broke.
+	if err := validate("FAIL"); err == nil {
+		t.Error("blank actual on a FAIL step was accepted")
+	}
+	// Status is checked first, so a bad status is not masked by a blank actual.
+	if err := validate("SKIP"); err == nil {
+		t.Error("unknown status with a blank actual was accepted")
 	}
 }
 
